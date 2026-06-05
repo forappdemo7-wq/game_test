@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import './globals.css';
 import React from 'react';
-import '@/src/index.css';
 
 export const metadata = {
-  title: 'Snake Legends | Next-Gen Multi-Universe Arena',
-  description: 'An advanced real-time HTML5 3D WebGL multiplayer snake slither combat game featuring customizable skins, achievements, clan warfare, and Ranked leagues.',
+  title: 'Snake Legends | Cyber Multi-Arena',
+  description: 'Real-time multidimensional snake battle arena built on Next.js 15',
 };
 
 export default function RootLayout({
@@ -17,8 +17,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="antialiased min-h-screen bg-[#050505] text-white selection:bg-cyan-500 selection:text-black">
+    <html lang="en" className="h-full w-full">
+      <head>
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700;900&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="h-full w-full bg-[#050505] antialiased">
         {children}
       </body>
     </html>
