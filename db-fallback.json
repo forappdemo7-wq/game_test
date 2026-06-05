@@ -1,0 +1,36 @@
+{
+  "users": {
+    "pilot_1780581739040_9459": {
+      "id": "pilot_1780581739040_9459",
+      "username": "hi",
+      "role": "user",
+      "createdAt": "2026-06-05T08:51:51.893Z",
+      "level": 1,
+      "xp": 0,
+      "coins": 100,
+      "rankPoints": 100,
+      "rank": "Bronze",
+      "stats": {
+        "kills": 0,
+        "deaths": 0,
+        "wins": 0,
+        "orbsCollected": 0,
+        "longestLength": 0,
+        "highestScore": 0,
+        "gamesPlayed": 0
+      },
+      "ownedCosmetics": [
+        "skin_neon_blue",
+        "title_beginner"
+      ],
+      "selectedSkin": "neon_blue",
+      "selectedTrail": "none",
+      "selectedTitle": "Beginner",
+      "clanId": null,
+      "online": false
+    }
+  },
+  "clans": {},
+  "friendRequests": [],
+  "matchesOffline": []
+}

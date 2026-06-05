@@ -1,0 +1,6 @@
+{
+  "name": "Snake Legends",
+  "description": "A high-fidelity HTML5 multiplayer neon snake arena featuring real-time physics, capabilities, custom cosmetic shops, achievements, and clan warfare.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

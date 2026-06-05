@@ -1,0 +1,303 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(uuid())
+  username       String          @unique
+  email          String?         @unique
+  passwordHash   String?
+  role           String          @default("user")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  
+  level          Int             @default(1)
+  xp             Int             @default(0)
+  coins          Int             @default(100)
+  rankPoints     Int             @default(100)
+  rank           String          @default("Bronze")
+
+  // Statistics
+  kills          Int             @default(0)
+  deaths         Int             @default(0)
+  wins           Int             @default(0)
+  orbsCollected  Int             @default(0)
+  longestLength  Int             @default(0)
+  highestScore   Int             @default(0)
+  gamesPlayed    Int             @default(0)
+
+  // Clan association
+  clanId         String?
+  clan           Clan?           @relation(fields: [clanId], references: [id])
+  clanRole       String?         // "leader", "officer", "member"
+
+  // Cosmetics
+  equippedSkin   String          @default("neon_blue")
+  equippedTrail  String          @default("none")
+  equippedTitle  String          @default("Beginner")
+  ownedCosmetics UserCosmetic[]
+
+  // Friendships (Bidirectional relationships)
+  friendsSent    Friend[]        @relation("FriendSender")
+  friendsRecv    Friend[]        @relation("FriendReceiver")
+
+  // Match association
+  matches        MatchParticipant[]
+
+  // Party association
+  partyId        String?
+  party          Party?          @relation(fields: [partyId], references: [id])
+
+  // Battle Pass progression
+  battlePassXp   Int             @default(0)
+  battlePassTier Int             @default(1)
+}
+
+model Match {
+  id           String             @id @default(uuid())
+  mode         String             // "casual", "ranked", "battle_royale", "private"
+  arenaSize    Int
+  winnerId     String?
+  startedAt    DateTime           @default(now())
+  endedAt      DateTime?
+  participants MatchParticipant[]
+}
+
+model MatchParticipant {
+  id        String   @id @default(uuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score     Int      @default(0)
+  kills     Int      @default(0)
+  length    Int      @default(0)
+  duration  Int      @default(0) // seconds survived
+}
+
+model Achievement {
+  id          String   @id @default(uuid())
+  title       String   @unique
+  description String
+  xpReward    Int
+  coinReward  Int
+  targetType  String   // "kills", "wins", "orbs", "level"
+  targetCount Int
+}
+
+model Clan {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  tag         String   @unique
+  leaderId    String
+  rankPoints  Int      @default(0)
+  createdAt   DateTime @default(now())
+  members     User[]
+}
+
+model Friend {
+  id          String   @id @default(uuid())
+  senderId    String
+  sender      User     @relation("FriendSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId  String
+  receiver    User     @relation("FriendReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  status      String   // "pending", "accepted", "blocked"
+  createdAt   DateTime @default(now())
+
+  @@unique([senderId, receiverId])
+}
+
+model Cosmetic {
+  id          String         @id
+  name        String
+  type        String         // "skin", "trail", "title"
+  value       String
+  cost        Int
+  rarity      String         // "common", "rare", "epic", "legendary"
+  owners      UserCosmetic[]
+}
+
+model UserCosmetic {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cosmeticId String
+  cosmetic   Cosmetic @relation(fields: [cosmeticId], references: [id], onDelete: Cascade)
+  unlockedAt DateTime @default(now())
+
+  @@unique([userId, cosmeticId])
+}
+
+model Party {
+  id        String   @id @default(uuid())
+  leaderId  String
+  code      String   @unique
+  members   User[]
+  createdAt DateTime @default(now())
+}
+
+model Leaderboard {
+  id        String   @id @default(uuid())
+  mode      String   // "global_xp", "highest_score", "clan_war"
+  userId    String
+  username  String
+  score     Int
+  rank      Int
+  updatedAt DateTime @default(now())
+}
+
+model BattlePass {
+  id             String   @id @default(uuid())
+  seasonId       String
+  season         Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  tier           Int
+  requiredXp     Int
+  rewardCoins    Int      @default(0)
+  rewardCosmetic String?
+  isPremium      Boolean  @default(false)
+}
+
+model Season {
+  id         String       @id @default(uuid())
+  number     Int          @unique
+  name       String
+  startDate  DateTime
+  endDate    DateTime
+  battlePass BattlePass[]
+}
+
+// PHASE 3: RANKED MATCHMAKING
+model RankedSeason {
+  id          String        @id @default(uuid())
+  number      Int           @unique
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean       @default(true)
+  rankedMatches RankedMatch[]
+}
+
+model RankedMatch {
+  id             String       @id @default(uuid())
+  seasonId       String
+  season         RankedSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  matchId        String       @unique
+  rankAvg        String       // Bronze, Silver, etc
+  winnerId       String?
+  startedAt      DateTime     @default(now())
+  endedAt        DateTime?
+  ratingShiftAvg Int          @default(25)
+}
+
+// PHASE 5: TOURNAMENT SYSTEM
+model Tournament {
+  id           String                  @id @default(uuid())
+  name         String
+  type         String                  // "DAILY", "WEEKLY", "MONTHLY"
+  status       String                  // "REGISTRATION", "ACTIVE", "COMPLETED"
+  startedAt    DateTime                @default(now())
+  rewardsJson  String                  // Coins, XP, Cosmetics, Titles
+  participants TournamentParticipant[]
+}
+
+model TournamentParticipant {
+  id           String     @id @default(uuid())
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  userId       String
+  username     String
+  bracketRound Int        @default(1)
+  isEliminated Boolean    @default(false)
+  scoreAvg     Int        @default(0)
+}
+
+model TournamentReward {
+  id           String   @id @default(uuid())
+  userId       String
+  tournamentId String
+  prizeCoins   Int      @default(0)
+  prizeXp      Int      @default(0)
+  cosmeticId   String?
+  earnedAt     DateTime @default(now())
+}
+
+// PHASE 6: REPLAY SYSTEM
+model Replay {
+  id         String        @id @default(uuid())
+  matchId    String        @unique
+  mode       String
+  winnerName String
+  duration   Int
+  loggedAt   DateTime      @default(now())
+  events     ReplayEvent[]
+}
+
+model ReplayEvent {
+  id         String   @id @default(uuid())
+  replayId   String
+  replay     Replay   @relation(fields: [replayId], references: [id], onDelete: Cascade)
+  tick       Int
+  type       String   // "kill", "ability", "position_snapshot"
+  payload    String   // JSON payload details
+}
+
+// PHASE 7: CLAN WARS
+model ClanWar {
+  id            String         @id @default(uuid())
+  clanAId       String
+  clanBId       String
+  clanAName     String
+  clanBName     String
+  status        String         // "PENDING", "ACTIVE", "COMPLETED"
+  winnerClanId  String?
+  pointsEarned  Int            @default(0)
+  createdAt     DateTime       @default(now())
+  endedAt       DateTime?
+  matches       ClanWarMatch[]
+}
+
+model ClanWarMatch {
+  id            String   @id @default(uuid())
+  clanWarId     String
+  clanWar       ClanWar  @relation(fields: [clanWarId], references: [id], onDelete: Cascade)
+  matchId       String
+  lobbyWinnerId String
+  scoreA        Int      @default(0)
+  scoreB        Int      @default(0)
+}
+
+model ClanSeason {
+  id        String   @id @default(uuid())
+  number    Int      @unique
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(true)
+}
+
+// PHASE 9: TRAINING SYSTEM
+model TrainingSession {
+  id           String   @id @default(uuid())
+  userId       String
+  courseType   String   // "TUTORIAL", "MOVEMENT", "ABILITY", "BOT_ARENA", "OBSTACLE", "SURVIVAL"
+  bestScore    Int      @default(0)
+  completed    Boolean  @default(false)
+  completedAt  DateTime @default(now())
+}
+
+model TrainingReward {
+  id          String   @id @default(uuid())
+  userId      String
+  xpAwarded   Int      @default(0)
+  coinsAwarded Int     @default(0)
+  earnedAt    DateTime @default(now())
+}
+
