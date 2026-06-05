@@ -6,6 +6,11 @@
 class SoundEffectsController {
   private ctx: AudioContext | null = null;
   private soundEnabled: boolean = true;
+  private ambientOsc1: OscillatorNode | null = null;
+  private ambientOsc2: OscillatorNode | null = null;
+  private ambientGain: GainNode | null = null;
+  private ambientFilter: BiquadFilterNode | null = null;
+  private lfo: OscillatorNode | null = null;
 
   constructor() {
     // Lazy initialisation to prevent console policies errors before click
@@ -27,10 +32,101 @@ class SoundEffectsController {
 
   public setSoundEnabled(enabled: boolean) {
     this.soundEnabled = enabled;
+    if (!enabled) {
+      this.stopBackgroundMusic();
+    } else {
+      this.startBackgroundMusic();
+    }
   }
 
   public isEnabled(): boolean {
     return this.soundEnabled;
+  }
+
+  // Generates infinite sci-fi dark cosmic ambient synthesizer soundtrack background
+  public startBackgroundMusic() {
+    if (!this.soundEnabled) return;
+    this.initContext();
+    if (!this.ctx) return;
+
+    // Guard duplicate instances
+    if (this.ambientOsc1) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      this.ambientGain = this.ctx.createGain();
+      this.ambientGain.gain.setValueAtTime(0, now);
+      this.ambientGain.gain.linearRampToValueAtTime(0.04, now + 2.0); // soft 2 second fade-in
+
+      // Primary deep drone (Triangle)
+      this.ambientOsc1 = this.ctx.createOscillator();
+      this.ambientOsc1.type = 'triangle';
+      this.ambientOsc1.frequency.setValueAtTime(55, now); // A1 note
+
+      // Secondary fifth drone (Sawtooth)
+      this.ambientOsc2 = this.ctx.createOscillator();
+      this.ambientOsc2.type = 'sawtooth';
+      this.ambientOsc2.frequency.setValueAtTime(82.41, now); // E2 note for high harmony resonance
+
+      // low pass filters to keep base range sweet and warm
+      this.ambientFilter = this.ctx.createBiquadFilter();
+      this.ambientFilter.type = 'lowpass';
+      this.ambientFilter.frequency.setValueAtTime(140, now);
+      this.ambientFilter.Q.setValueAtTime(3.5, now);
+
+      // Low frequency modulator to gently sweep lowpass frequency back and forth
+      this.lfo = this.ctx.createOscillator();
+      this.lfo.type = 'sine';
+      this.lfo.frequency.setValueAtTime(0.12, now); // very slow 0.12Hz sweep rate
+
+      const lfoGain = this.ctx.createGain();
+      lfoGain.gain.setValueAtTime(45, now); // Modulation depth (+/- 45Hz)
+
+      // Connect LFO sweep depth into ambient filter frequency
+      this.lfo.connect(lfoGain);
+      lfoGain.connect(this.ambientFilter.frequency);
+
+      // Routing: Oscs -> Lowpass Filter -> Volume Gain -> Speaker output
+      this.ambientOsc1.connect(this.ambientFilter);
+      this.ambientOsc2.connect(this.ambientFilter);
+      this.ambientFilter.connect(this.ambientGain);
+      this.ambientGain.connect(this.ctx.destination);
+
+      // Start infinite synthesis generators
+      this.ambientOsc1.start(now);
+      this.ambientOsc2.start(now);
+      this.lfo.start(now);
+    } catch (err) {
+      console.warn("Failed synthesizing ambient space background music:", err);
+    }
+  }
+
+  public stopBackgroundMusic() {
+    try {
+      if (this.ambientOsc1) {
+        this.ambientOsc1.stop();
+        this.ambientOsc1.disconnect();
+        this.ambientOsc1 = null;
+      }
+      if (this.ambientOsc2) {
+        this.ambientOsc2.stop();
+        this.ambientOsc2.disconnect();
+        this.ambientOsc2 = null;
+      }
+      if (this.lfo) {
+        this.lfo.stop();
+        this.lfo.disconnect();
+        this.lfo = null;
+      }
+      if (this.ambientGain) {
+        this.ambientGain.disconnect();
+        this.ambientGain = null;
+      }
+      if (this.ambientFilter) {
+        this.ambientFilter.disconnect();
+        this.ambientFilter = null;
+      }
+    } catch (e) {}
   }
 
   // Brief bright chime on picking up orbs

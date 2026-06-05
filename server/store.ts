@@ -631,6 +631,10 @@ class Store {
     return this.data.replays[matchId] || null;
   }
 
+  public getAllReplays(): Record<string, ReplayData> {
+    return this.data.replays || {};
+  }
+
   // Match analytics tracking
   public trackMatchEnd(mode: string, winnerName: string, scores: Array<{ name: string; score: number; kills: number }>) {
     const id = `match_${Date.now()}`;

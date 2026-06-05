@@ -150,6 +150,8 @@ export interface ServerPlayer {
   rank: PlayerRank;
   level: number;
   kills: number;
+  difficulty?: 'easy' | 'medium' | 'hard' | 'elite';
+  isBoss?: boolean;
 }
 
 export interface Orb {
@@ -168,6 +170,7 @@ export interface ServerGameState {
   brZoneRadius: number; // active radius for Battle Royale
   brCenter: Point;
   timeLeft: number; // game time ending/shrinking
+  activeWeeklyEvent?: string; // Double XP Weekend, Giant Snake Mode, Speed Arena, Boss Raid
 }
 
 export interface GameConfig {

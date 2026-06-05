@@ -36,6 +36,7 @@ interface MainMenuProps {
   onJoinGame: (mode: GameMode, roomCode?: string) => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
+  onWatchReplay?: (matchId: string) => void;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
@@ -44,8 +45,9 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onJoinGame,
   soundEnabled,
   onToggleSound,
+  onWatchReplay,
 }) => {
-  type Tab = 'play' | 'training' | 'shop' | 'clans' | 'friends' | 'leaderboards' | 'achievements' | 'profile';
+  type Tab = 'play' | 'training' | 'shop' | 'clans' | 'friends' | 'leaderboards' | 'achievements' | 'profile' | 'replays';
   const [activeTab, setActiveTab] = useState<Tab>('play');
 
   // Form helpers
@@ -70,6 +72,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   const [friendsList, setFriendsList] = useState<FriendShip[]>([]);
   const [friendRequests, setFriendRequests] = useState<any[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [savedReplays, setSavedReplays] = useState<Record<string, any>>({});
 
   // Fetch contextual features helper
   const syncServerData = async () => {
@@ -110,6 +113,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       if (achRes.ok) {
         const achData = await achRes.json();
         setAchievements(achData || []);
+      }
+
+      const replayRes = await fetch('/api/replays');
+      if (replayRes.ok) {
+        const replayData = await replayRes.json();
+        setSavedReplays(replayData || {});
       }
     } catch (e) {
       console.warn('Backend endpoints offline. Using local fallback simulation logic:', e);
@@ -424,6 +433,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               { id: 'leaderboards', label: 'Top Rankings', icon: Trophy },
               { id: 'achievements', label: 'Achievements', icon: Award },
               { id: 'profile', label: 'Pilot Telemetry', icon: User },
+              { id: 'replays', label: 'Match Replays', icon: Compass },
             ].map((btn) => {
               const Icon = btn.icon;
               const isSelected = activeTab === btn.id;
@@ -1254,6 +1264,87 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 <span>Account file created: {user.createdAt || 'N/A'}</span>
                 <span>ID: {user.id}</span>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MATCH REPLAYS ARCHIVE PANEL */}
+        {activeTab === 'replays' && (
+          <div className="space-y-6 max-w-4xl animate-fade-in font-mono text-xs text-slate-300">
+            <div>
+              <h2 className="text-2xl font-black uppercase tracking-wider text-[#00f2ff] mb-1 font-sans">
+                TACTICAL REPLAYS LOG
+              </h2>
+              <p className="text-gray-400 text-xs font-sans">
+                Access stored holographic match highlights. Reconstruct player slithers, disintegrations and flight vectors locally.
+              </p>
+            </div>
+
+            <div className="bg-[#0c0d16] border border-[#00f2ff]/20 p-5 rounded-none">
+              <h3 className="text-xs font-bold text-gray-300 uppercase tracking-widest border-b border-[#00f2ff]/10 pb-2 flex justify-between font-sans mb-4">
+                <span>AUTHENTIC MATCH CHANNELS</span>
+                <span className="text-[#00f2ff]">ARCHIVE LIVE</span>
+              </h3>
+
+              {Object.keys(savedReplays).length === 0 ? (
+                <div className="text-center py-16 text-gray-500 font-sans uppercase tracking-widest bg-black/40 border border-white/5 space-y-3">
+                  <p className="text-sm font-black text-gray-450">no stored tapes compiled</p>
+                  <p className="text-2xs text-gray-600">Replays are recorded automatically during matches upon eliminations!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Object.values(savedReplays).map((replay: any) => (
+                    <div
+                      key={replay.matchId}
+                      className="bg-black/50 border border-white/5 hover:border-[#00f2ff]/30 p-4 relative flex flex-col justify-between transition-all group"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-start font-sans">
+                          <span className="text-[10px] font-black tracking-widest text-[#00f2ff] uppercase">
+                            {replay.mode.replace('_', ' ')} MODE
+                          </span>
+                          <span className="text-[10px] text-gray-500 font-mono">
+                            {replay.date}
+                          </span>
+                        </div>
+
+                        <div className="border-[#00f2ff]/5 bg-black/30 border p-2 text-2xs truncate">
+                          <span className="text-gray-500">WINNER: </span>
+                          <span className="text-emerald-400 font-black">{replay.winnerName.toUpperCase()}</span>
+                        </div>
+
+                        <div className="text-3xs text-gray-500 flex justify-between">
+                          <span>SNAPSHOTS: {replay.frames?.length || 0} TILES</span>
+                          <span>INCIDENTS: {replay.events?.length || 0} LOGS</span>
+                        </div>
+
+                        {replay.events && replay.events.length > 0 && (
+                          <div className="mt-3 bg-red-950/20 border border-red-500/15 p-2 text-[10px] font-mono text-red-300 max-h-16 overflow-y-auto">
+                            <span className="text-[9px] uppercase text-red-400 font-bold block mb-1">ELIMINATIONS STATE</span>
+                            {replay.events.map((ev: any, idx: number) => (
+                              <div key={idx} className="truncate">
+                                • [T+{ev.tick}] {ev.desc}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          if (onWatchReplay) {
+                            SoundManager.playVictoryArpeggio();
+                            onWatchReplay(replay.matchId);
+                          }
+                        }}
+                        className="mt-4 w-full py-2.5 bg-gradient-to-r from-cyan-950 to-indigo-950 border border-cyan-500/35 text-white hover:border-[#00f2ff] hover:from-cyan-900 font-sans font-bold text-center uppercase tracking-widest transition-all text-3xs cursor-pointer"
+                      >
+                        LAUNCH RECODE SPECTATE
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
