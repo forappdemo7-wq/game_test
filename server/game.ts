@@ -12,13 +12,11 @@ const BASE_SPEED = 5;
 const BOOST_SPEED = 9;
 
 class autorunGameController {
-  public activeWeeklyEvent: string = 'Boss Raid'; // Options: Double XP Weekend, Giant Snake Mode, Speed Arena, Boss Raid
-  
   public state: Record<GameMode, ServerGameState> = {
-    [GameMode.CASUAL]: { players: {}, orbs: [], arenaSize: ARENA_SIZE, brZoneRadius: ARENA_SIZE, brCenter: { x: ARENA_SIZE / 2, y: ARENA_SIZE / 2 }, timeLeft: 3600, activeWeeklyEvent: 'Boss Raid' },
-    [GameMode.RANKED]: { players: {}, orbs: [], arenaSize: ARENA_SIZE, brZoneRadius: ARENA_SIZE, brCenter: { x: ARENA_SIZE / 2, y: ARENA_SIZE / 2 }, timeLeft: 3600, activeWeeklyEvent: 'Boss Raid' },
-    [GameMode.BATTLE_ROYALE]: { players: {}, orbs: [], arenaSize: ARENA_SIZE, brZoneRadius: 2000, brCenter: { x: ARENA_SIZE / 2, y: ARENA_SIZE / 2 }, timeLeft: 3600, activeWeeklyEvent: 'Boss Raid' },
-    [GameMode.PRIVATE]: { players: {}, orbs: [], arenaSize: ARENA_SIZE, brZoneRadius: ARENA_SIZE, brCenter: { x: ARENA_SIZE / 2, y: ARENA_SIZE / 2 }, timeLeft: 3600, activeWeeklyEvent: 'Boss Raid' },
+    [GameMode.CASUAL]: { players: {}, orbs: [], arenaSize: ARENA_SIZE, brZoneRadius: ARENA_SIZE, brCenter: { x: ARENA_SIZE / 2, y: ARENA_SIZE / 2 }, timeLeft: 3600 },
+    [GameMode.RANKED]: { players: {}, orbs: [], arenaSize: ARENA_SIZE, brZoneRadius: ARENA_SIZE, brCenter: { x: ARENA_SIZE / 2, y: ARENA_SIZE / 2 }, timeLeft: 3600 },
+    [GameMode.BATTLE_ROYALE]: { players: {}, orbs: [], arenaSize: ARENA_SIZE, brZoneRadius: 2000, brCenter: { x: ARENA_SIZE / 2, y: ARENA_SIZE / 2 }, timeLeft: 3600 },
+    [GameMode.PRIVATE]: { players: {}, orbs: [], arenaSize: ARENA_SIZE, brZoneRadius: ARENA_SIZE, brCenter: { x: ARENA_SIZE / 2, y: ARENA_SIZE / 2 }, timeLeft: 3600 },
   };
 
   public onKill: (mode: GameMode, victimName: string, killerName: string) => void = () => {};
@@ -55,55 +53,6 @@ class autorunGameController {
     }
   }
 
-  public spawnWorldBoss(mode: GameMode) {
-    const state = this.state[mode];
-    const id = 'world_boss_hydra';
-    
-    // Check if world boss is already present
-    if (state.players[id]) return;
-
-    const x = ARENA_SIZE / 2;
-    const y = ARENA_SIZE / 2;
-    const angle = 0;
-    
-    const segments: Point[] = [];
-    const initialBossSegments = 60; // GIGANTIC size
-    for (let i = 0; i < initialBossSegments; i++) {
-      segments.push({ x: x - Math.cos(angle) * i * 15, y: y - Math.sin(angle) * i * 15 });
-    }
-
-    const boss: ServerPlayer = {
-      id,
-      name: '👾 NEON HYDRA [WORLD BOSS]',
-      isBot: true,
-      isBoss: true,
-      skin: 'rainbow',
-      trail: 'galaxy_trail',
-      title: 'RAID WORLD BOSS',
-      x,
-      y,
-      angle,
-      segments,
-      score: 150,
-      length: initialBossSegments,
-      speed: 4, // slow but devastating
-      isDead: false,
-      respawnTimer: 0,
-      abilities: {
-        dash: { active: false, duration: 0 },
-        shield: { active: true, duration: 99999 }, // World Boss has permanent body aura shields!
-        magnet: { active: true, duration: 99999 },
-        ghost: { active: false, duration: 0 },
-      },
-      rank: PlayerRank.LEGEND,
-      level: 100,
-      kills: 0,
-      difficulty: 'elite',
-    };
-
-    state.players[id] = boss;
-  }
-
   private spawnBot(mode: GameMode) {
     const id = `bot_${Math.floor(Math.random() * 1000000)}`;
     const names = ['ViperBot', 'CruiserGlider', 'NeonStrike', 'CobaltCrawl', 'QuantumLoop', 'ApexGlider', 'GlitchGiga', 'SentinelX'];
@@ -119,36 +68,13 @@ class autorunGameController {
       segments.push({ x: x - Math.cos(angle) * i * 15, y: y - Math.sin(angle) * i * 15 });
     }
 
-    const difficulties: Array<'easy' | 'medium' | 'hard' | 'elite'> = ['easy', 'medium', 'hard', 'elite'];
-    const difficulty = difficulties[Math.floor(Math.random() * difficulties.length)];
-    const titles = {
-      easy: 'Cadet Trainee',
-      medium: 'Tactical Fighter',
-      hard: 'Apex Ranger',
-      elite: 'Legendary Gladiator',
-    };
-
-    const skins = {
-      easy: 'neon_blue',
-      medium: 'neon_red',
-      hard: 'fire',
-      elite: 'galaxy',
-    };
-
-    const trails = {
-      easy: 'none',
-      medium: 'none',
-      hard: 'fire_trail',
-      elite: 'galaxy_trail',
-    };
-
     const bot: ServerPlayer = {
       id,
       name,
       isBot: true,
-      skin: skins[difficulty],
-      trail: trails[difficulty],
-      title: titles[difficulty],
+      skin: this.getRandomSkin(),
+      trail: 'none',
+      title: 'Bot Opponent',
       x,
       y,
       angle,
@@ -167,7 +93,6 @@ class autorunGameController {
       rank: PlayerRank.GOLD,
       level: Math.floor(2 + Math.random() * 15),
       kills: 0,
-      difficulty,
     };
 
     this.state[mode].players[id] = bot;
@@ -267,15 +192,8 @@ class autorunGameController {
       this.spawnOrbs(mode, 12);
     }
 
-    // World Boss periodic spawning check
-    if (this.activeWeeklyEvent === 'Boss Raid' || Math.random() < 0.002) {
-      if (!state.players['world_boss_hydra'] && (mode === GameMode.CASUAL || mode === GameMode.BATTLE_ROYALE)) {
-        this.spawnWorldBoss(mode);
-      }
-    }
-
     // Re-population system bots
-    const botCount = Object.values(state.players).filter((p) => p.isBot && !p.isDead && !p.isBoss).length;
+    const botCount = Object.values(state.players).filter((p) => p.isBot && !p.isDead).length;
     if (botCount < 8 && (mode === GameMode.CASUAL || mode === GameMode.RANKED)) {
       this.spawnBot(mode);
     }
@@ -305,16 +223,8 @@ class autorunGameController {
         }
       });
 
-      // Weekly Event: Speed Arena increases speed reference multipliers
-      let currentBaseSpeed = BASE_SPEED;
-      let currentBoostSpeed = BOOST_SPEED;
-      if (this.activeWeeklyEvent === 'Speed Arena') {
-        currentBaseSpeed *= 1.4;
-        currentBoostSpeed *= 1.4;
-      }
-
       // Update speed value references
-      p.speed = p.abilities.dash.active ? currentBoostSpeed : currentBaseSpeed;
+      p.speed = p.abilities.dash.active ? BOOST_SPEED : BASE_SPEED;
 
       // Exhaust Mass consumption logic
       if (p.abilities.dash.active && p.score > 8) {
@@ -337,11 +247,6 @@ class autorunGameController {
       // Check bot auto piloting vectors update
       if (p.isBot) {
         this.updateBotPathfinding(p, state);
-      }
-
-      // Server Anti-Cheat: Validate Impossible Speeds & Boundaries
-      if (p.speed > currentBoostSpeed * 1.1 && !p.isBoss) {
-        p.speed = currentBoostSpeed; // Clamp speed to maximum legal limit
       }
 
       // Calculate Head Coordinates
@@ -398,34 +303,15 @@ class autorunGameController {
 
         if (dist < 26) {
           // Absorb score XP
-          let finalOrbVal = orb.value;
-          if (this.activeWeeklyEvent === 'Double XP Weekend') {
-            finalOrbVal *= 2.0; // Weekly multiplier!
-          }
-
-          p.score += finalOrbVal * 0.35;
+          p.score += orb.value * 0.35;
           state.orbs.splice(i, 1);
 
           if (!p.isBot) {
             DBInstance.incrementQuest(p.id, 'orbs', 1);
             // Reward safe micro gains
-            const coinMultiplier = this.activeWeeklyEvent === 'Double XP Weekend' ? 2 : 1;
-            DBInstance.addCoinsAndXp(p.id, 1 * coinMultiplier, 3 * coinMultiplier);
+            DBInstance.addCoinsAndXp(p.id, 1, 3);
           }
         }
-      }
-
-      // World Boss periodically scattering firing projectiles (Orbs with neon hazard colors)
-      if (p.isBoss && Math.random() < 0.08) {
-        const fireAngle = p.angle + (Math.random() - 0.5) * Math.PI;
-        state.orbs.push({
-          id: `boss_projectile_${Date.now()}_${Math.random()}`,
-          x: p.x + Math.cos(fireAngle) * 80,
-          y: p.y + Math.sin(fireAngle) * 80,
-          value: 8,
-          color: '#f43f5e',
-          isPremium: true,
-        });
       }
     });
 
@@ -460,13 +346,10 @@ class autorunGameController {
             } else {
               // Crash and disintegrate
               this.disintegrate(p1, mode, p2.name);
-              
-              if (!p1.isBoss) {
-                p2.kills++;
-                if (!p2.isBot) {
-                  DBInstance.incrementQuest(p2.id, 'kills', 1);
-                  DBInstance.addCoinsAndXp(p2.id, 40, 100);
-                }
+              p2.kills++;
+              if (!p2.isBot) {
+                DBInstance.incrementQuest(p2.id, 'kills', 1);
+                DBInstance.addCoinsAndXp(p2.id, 40, 100);
               }
               return; // break iteration instantly to maintain frame cycle stability
             }
@@ -477,167 +360,27 @@ class autorunGameController {
   }
 
   private updateBotPathfinding(bot: ServerPlayer, state: ServerGameState) {
-    if (bot.isBoss) {
-      // World Boss specific pathfinding: hunt the closest non-bot player aggressively!
-      let closestPlayer: ServerPlayer | null = null;
-      let minDistance = 2000;
+    // Basic reactive steering updates
+    if (Math.random() < 0.05) {
+      // Direct angle towards nearest orb
+      let nearestOrb: Orb | null = null;
+      let minDist = 400;
 
-      Object.values(state.players).forEach((p) => {
-        if (!p.isBot && !p.isDead) {
-          const dist = Math.sqrt((p.x - bot.x) ** 2 + (p.y - bot.y) ** 2);
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestPlayer = p;
-          }
+      state.orbs.forEach((orb) => {
+        const dx = orb.x - bot.x;
+        const dy = orb.y - bot.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < minDist) {
+          minDist = dist;
+          nearestOrb = orb;
         }
       });
 
-      if (closestPlayer) {
-        const target = closestPlayer as ServerPlayer;
-        bot.angle = Math.atan2(target.y - bot.y, target.x - bot.x);
-      } else if (Math.random() < 0.05) {
-        bot.angle += (Math.random() - 0.5) * 1.2;
-      }
-      return;
-    }
-
-    const diff = bot.difficulty || 'medium';
-
-    if (diff === 'easy') {
-      // Easy Bot: basic gentle slithering towards any nearby orb
-      if (Math.random() < 0.03) {
-        let nearestOrb: Orb | null = null;
-        let minDist = 300;
-
-        state.orbs.forEach((orb) => {
-          const dist = Math.sqrt((orb.x - bot.x) ** 2 + (orb.y - bot.y) ** 2);
-          if (dist < minDist) {
-            minDist = dist;
-            nearestOrb = orb;
-          }
-        });
-
-        if (nearestOrb) {
-          const tOrb = nearestOrb as Orb;
-          bot.angle = Math.atan2(tOrb.y - bot.y, tOrb.x - bot.x);
-        } else {
-          bot.angle += (Math.random() - 0.5) * 1.5;
-        }
-      }
-    } else if (diff === 'medium') {
-      // Medium Bot: tracks orbs and avoids wall boundaries
-      if (Math.random() < 0.06) {
-        let nearestOrb: Orb | null = null;
-        let minDist = 400;
-
-        state.orbs.forEach((orb) => {
-          const dist = Math.sqrt((orb.x - bot.x) ** 2 + (orb.y - bot.y) ** 2);
-          if (dist < minDist) {
-            minDist = dist;
-            nearestOrb = orb;
-          }
-        });
-
-        if (nearestOrb) {
-          const tOrb = nearestOrb as Orb;
-          bot.angle = Math.atan2(tOrb.y - bot.y, tOrb.x - bot.x);
-        } else {
-          bot.angle += (Math.random() - 0.5) * 1.5;
-        }
-      }
-    } else if (diff === 'hard') {
-      // Hard Bot: chases orbs, speed boosts occasionally, and tries to cut off nearby players
-      let targetCoords: Point | null = null;
-      let closestEnemy: ServerPlayer | null = null;
-      let enemyDist = 250;
-
-      Object.values(state.players).forEach((p) => {
-        if (p.id !== bot.id && !p.isDead) {
-          const dist = Math.sqrt((p.x - bot.x) ** 2 + (p.y - bot.y) ** 2);
-          if (dist < enemyDist) {
-            enemyDist = dist;
-            closestEnemy = p;
-          }
-        }
-      });
-
-      if (closestEnemy) {
-        const enemy = closestEnemy as ServerPlayer;
-        // Hunt/cut-off steering vector
-        bot.angle = Math.atan2(enemy.y - bot.y, enemy.x - bot.x) + 0.35; // offset slightly to swirl around them
-        bot.abilities.dash.active = bot.score > 12 && Math.random() < 0.15;
-      } else if (Math.random() < 0.08) {
-        let nearestOrb: Orb | null = null;
-        let minDist = 500;
-
-        state.orbs.forEach((orb) => {
-          const dist = Math.sqrt((orb.x - bot.x) ** 2 + (orb.y - bot.y) ** 2);
-          if (dist < minDist) {
-            minDist = dist;
-            nearestOrb = orb;
-          }
-        });
-
-        if (nearestOrb) {
-          const tOrb = nearestOrb as Orb;
-          bot.angle = Math.atan2(tOrb.y - bot.y, tOrb.x - bot.x);
-        }
-      }
-    } else if (diff === 'elite') {
-      // Elite Bot: extremely aggressive tracking, predictive pathing, and active capability casting!
-      let closestEnemy: ServerPlayer | null = null;
-      let enemyDist = 300;
-
-      Object.values(state.players).forEach((p) => {
-        if (p.id !== bot.id && !p.isDead) {
-          const dist = Math.sqrt((p.x - bot.x) ** 2 + (p.y - bot.y) ** 2);
-          if (dist < enemyDist) {
-            enemyDist = dist;
-            closestEnemy = p;
-          }
-        }
-      });
-
-      if (closestEnemy) {
-        const enemy = closestEnemy as ServerPlayer;
-        // Steer predictively ahead of player head
-        const predictedX = enemy.x + Math.cos(enemy.angle) * enemy.speed * 4;
-        const predictedY = enemy.y + Math.sin(enemy.angle) * enemy.speed * 4;
-        bot.angle = Math.atan2(predictedY - bot.y, predictedX - bot.x);
-
-        // Turn on dash propulsion for strategic maneuvers
-        bot.abilities.dash.active = bot.score > 9;
-
-        // Smart capability triggers: Activate shields if within direct collision risk
-        if (enemyDist < 90 && Math.random() < 0.2) {
-          bot.abilities.shield.active = true;
-          bot.abilities.shield.duration = 60;
-        }
-        if (enemyDist < 120 && Math.random() < 0.1) {
-          bot.abilities.ghost.active = true;
-          bot.abilities.ghost.duration = 40;
-        }
+      if (nearestOrb) {
+        const tOrb = nearestOrb as Orb;
+        bot.angle = Math.atan2(tOrb.y - bot.y, tOrb.x - bot.x);
       } else {
-        bot.abilities.dash.active = false;
-        if (Math.random() < 0.1) {
-          // Track premium gold orbs
-          let bestOrb: Orb | null = null;
-          let bestDist = 600;
-
-          state.orbs.forEach((orb) => {
-            const dist = Math.sqrt((orb.x - bot.x) ** 2 + (orb.y - bot.y) ** 2);
-            const scoreRating = orb.isPremium ? dist / 2.5 : dist;
-            if (scoreRating < bestDist) {
-              bestDist = scoreRating;
-              bestOrb = orb;
-            }
-          });
-
-          if (bestOrb) {
-            const tOrb = bestOrb as Orb;
-            bot.angle = Math.atan2(tOrb.y - bot.y, tOrb.x - bot.x);
-          }
-        }
+        bot.angle += (Math.random() - 0.5) * 1.5;
       }
     }
 
@@ -650,21 +393,21 @@ class autorunGameController {
 
   private disintegrate(player: ServerPlayer, mode: GameMode, killerName: string) {
     player.isDead = true;
-    player.respawnTimer = player.isBoss ? 240 : 100; // Boss respawns slower
+    player.respawnTimer = 100; // ~5 seconds based on 20 TPS timer rate limits
 
     // Disperse scores weight back into orbs
-    const dispersAmount = Math.min(player.isBoss ? 150 : 25, Math.floor(player.segments.length));
+    const dispersAmount = Math.min(25, Math.floor(player.segments.length));
     const state = this.state[mode];
 
     for (let i = 0; i < dispersAmount; i++) {
       const seg = player.segments[i * Math.floor(player.segments.length / dispersAmount)] || player;
       state.orbs.push({
         id: `scattered_${Date.now()}_${Math.random()}`,
-        x: seg.x + (Math.random() - 0.5) * 55,
-        y: seg.y + (Math.random() - 0.5) * 55,
-        value: player.isBoss ? 15 : 4,
-        color: player.isBoss ? '#f59e0b' : player.isBot ? '#f43f5e' : '#38bdf8',
-        isPremium: player.isBoss || Math.random() < 0.25,
+        x: seg.x + (Math.random() - 0.5) * 45,
+        y: seg.y + (Math.random() - 0.5) * 45,
+        value: 4,
+        color: player.isBot ? '#f43f5e' : '#38bdf8',
+        isPremium: Math.random() < 0.25,
       });
     }
 
@@ -682,17 +425,6 @@ class autorunGameController {
         }
         DBInstance.saveUser(user);
       }
-    } else if (player.isBoss) {
-      // World Boss destroyed! Disperse rare token credits to closest players
-      Object.keys(state.players).forEach((id) => {
-        const p = state.players[id];
-        if (!p.isBot && !p.isDead) {
-          const dist = Math.sqrt((p.x - player.x) ** 2 + (p.y - player.y) ** 2);
-          if (dist < 800) {
-            DBInstance.addCoinsAndXp(p.id, 120, 300); // Massive raid bonus coins & XP!
-          }
-        }
-      });
     }
   }
 
@@ -705,19 +437,11 @@ class autorunGameController {
     player.x = rx;
     player.y = ry;
     player.angle = rAngle;
-
-    // Weekly Event: Giant Snake Mode spawns players with greater start size
-    let startScore = 10;
-    if (this.activeWeeklyEvent === 'Giant Snake Mode') {
-      startScore = 25;
-    }
-
-    player.score = startScore;
+    player.score = 10;
     player.kills = 0;
 
     const segments: Point[] = [];
-    const segmentCount = Math.floor(startScore);
-    for (let i = 0; i < segmentCount; i++) {
+    for (let i = 0; i < 10; i++) {
       segments.push({ x: rx - Math.cos(rAngle) * i * 15, y: ry - Math.sin(rAngle) * i * 15 });
     }
     player.segments = segments;

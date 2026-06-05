@@ -32,8 +32,6 @@ export default function AppPage() {
   const socketRef = useRef<Socket | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
-  const [isReplaying, setIsReplaying] = useState(false);
-  const replayIntervalRef = useRef<any>(null);
 
   // Cache user login details locally
   useEffect(() => {
@@ -82,14 +80,10 @@ export default function AppPage() {
     setCurrentGameMode(mode);
     setRoomCode(selectedRoomCode || null);
     setIsPlaying(true);
-    setIsReplaying(false);
     setPlayers({});
     setOrbs([]);
     setChatMessages([]);
     setKillFeed([]);
-
-    // Spark procedural background ambient drone synth
-    SoundManager.startBackgroundMusic();
 
     const socket = io({
       path: '/socket.io',
@@ -138,107 +132,6 @@ export default function AppPage() {
     });
   };
 
-  const handleWatchReplay = async (matchId: string) => {
-    if (!user) return;
-
-    setIsPlaying(true);
-    setIsReplaying(true);
-    setPlayers({});
-    setOrbs([]);
-    setChatMessages([]);
-    setKillFeed([]);
-
-    SoundManager.startBackgroundMusic();
-
-    try {
-      const res = await fetch(`/api/replays/${matchId}`);
-      if (!res.ok) {
-        alert("Could not load selected replay files on the server.");
-        handleExitGame();
-        return;
-      }
-      const data = await res.json();
-      if (!data || !data.frames || data.frames.length === 0) {
-        alert("This record contains no slither snapshots.");
-        handleExitGame();
-        return;
-      }
-
-      setKillFeed([{
-        id: 'replay_init_evt',
-        victimName: 'COSMIC RECORDER',
-        killerName: 'SPECTATE BOOT',
-        timestamp: Date.now()
-      }]);
-
-      let frameIdx = 0;
-      if (replayIntervalRef.current) {
-        clearInterval(replayIntervalRef.current);
-      }
-
-      replayIntervalRef.current = setInterval(() => {
-        const frame = data.frames[frameIdx];
-        if (!frame) {
-          clearInterval(replayIntervalRef.current);
-          replayIntervalRef.current = null;
-          alert("Replay sequence completed.");
-          handleExitGame();
-          return;
-        }
-
-        // Map Replay state frame to snake structures
-        const activePlayers: Record<string, ServerPlayer> = {};
-        Object.keys(frame.players).forEach((pId) => {
-          const raw = frame.players[pId];
-          activePlayers[pId] = {
-            id: pId,
-            name: pId === 'world_boss_hydra' ? 'NEON HYDRA' : pId.includes('bot') ? 'SYSTEM BOT' : pId,
-            x: raw.x,
-            y: raw.y,
-            angle: raw.angle,
-            segments: raw.segments,
-            score: raw.score,
-            length: raw.segments.length,
-            speed: 4,
-            skin: pId === 'world_boss_hydra' ? 'galaxy' : 'neon_blue',
-            trail: 'glow',
-            title: pId === 'world_boss_hydra' ? 'WORLD BOSS [RAID]' : 'SPECTATE REC',
-            isDead: false,
-            isBot: pId.includes('bot'),
-            isBoss: pId === 'world_boss_hydra',
-            kills: 0,
-            rank: 'BRONZE' as any,
-            level: 1,
-            respawnTimer: 0,
-            abilities: {
-              shield: { active: false, duration: 0 },
-              magnet: { active: false, duration: 0 },
-              ghost: { active: false, duration: 0 },
-              dash: { active: false, duration: 0 }
-            }
-          };
-        });
-
-        const activeOrbs: Orb[] = frame.orbs.map((o: any) => ({
-          id: o.id,
-          x: o.x,
-          y: o.y,
-          value: o.premium ? 10 : 3,
-          color: o.premium ? '#fbbf24' : '#38bdf8',
-          isPremium: o.premium
-        }));
-
-        setPlayers(activePlayers);
-        setOrbs(activeOrbs);
-
-        frameIdx++;
-      }, 200); // Renders smoothly at recorded snapshot frequencies
-    } catch (e) {
-      console.warn("Spectator play failed:", e);
-      handleExitGame();
-    }
-  };
-
   const handleInputChange = (angle: number, isBoosting: boolean) => {
     if (socketRef.current && socketRef.current.connected) {
       socketRef.current.emit('player:input', { angle, isBoosting });
@@ -261,23 +154,11 @@ export default function AppPage() {
   };
 
   const handleExitGame = () => {
-    // Teardown normal sockets
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
     }
-
-    // Teardown replay player simulation intervals
-    if (replayIntervalRef.current) {
-      clearInterval(replayIntervalRef.current);
-      replayIntervalRef.current = null;
-    }
-
     setIsPlaying(false);
-    setIsReplaying(false);
-
-    // Stop ambient synthesizers music loop
-    SoundManager.stopBackgroundMusic();
 
     if (user) {
       fetch(`/api/users/${user.id}`)
@@ -332,7 +213,6 @@ export default function AppPage() {
             onJoinGame={handleJoinGame}
             soundEnabled={soundEnabled}
             onToggleSound={handleToggleSound}
-            onWatchReplay={handleWatchReplay}
           />
 
           {user && user.role === 'admin' && (
