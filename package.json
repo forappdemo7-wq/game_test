@@ -10,7 +10,7 @@
 
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "npx prisma generate && next build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "npx prisma generate && next build && npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist db-fallback.json .next",
     "lint": "tsc --noEmit"
@@ -21,6 +21,7 @@
     "@prisma/client": "^6.4.0",
     "@tailwindcss/postcss": "^4.3.0",
     "dotenv": "^17.2.3",
+    "esbuild": "^0.25.0",
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
@@ -37,7 +38,6 @@
     "@types/node": "^22.14.0",
     "@types/react": "19.2.17",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
     "prisma": "^6.4.0",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.21.0",
