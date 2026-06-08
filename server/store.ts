@@ -109,6 +109,7 @@ class Store {
     matchesOffline: [],
     replays: {},
   };
+  private saveTimeout: any = null;
 
   constructor() {
     this.load();
@@ -135,11 +136,15 @@ class Store {
   }
 
   private save() {
-    try {
-      fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
-    } catch (e) {
-      console.error('Failed to write database fallback:', e);
-    }
+    if (this.saveTimeout) return;
+    this.saveTimeout = setTimeout(() => {
+      this.saveTimeout = null;
+      fs.writeFile(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8', (err) => {
+        if (err) {
+          console.error('Failed to write database fallback:', err);
+        }
+      });
+    }, 2000); // Max once every 2 seconds throttled save to disk
   }
 
   // Authenticators

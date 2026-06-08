@@ -649,12 +649,17 @@ class autorunGameController {
   }
 
   private disintegrate(player: ServerPlayer, mode: GameMode, killerName: string) {
-    player.isDead = true;
-    player.respawnTimer = player.isBoss ? 240 : 100; // Boss respawns slower
+    const state = this.state[mode];
+    if (player.isBot && !player.isBoss) {
+      // Regular bot: delete immediately to prevent bot accumulation leak
+      delete state.players[player.id];
+    } else {
+      player.isDead = true;
+      player.respawnTimer = player.isBoss ? 240 : 100; // Boss respawns slower
+    }
 
     // Disperse scores weight back into orbs
     const dispersAmount = Math.min(player.isBoss ? 150 : 25, Math.floor(player.segments.length));
-    const state = this.state[mode];
 
     for (let i = 0; i < dispersAmount; i++) {
       const seg = player.segments[i * Math.floor(player.segments.length / dispersAmount)] || player;
