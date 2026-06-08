@@ -1,0 +1,102 @@
+{
+  "users": {
+    "pilot_1780581739040_9459": {
+      "id": "pilot_1780581739040_9459",
+      "username": "hi",
+      "role": "user",
+      "createdAt": "2026-06-08T04:41:31.754Z",
+      "level": 1,
+      "xp": 0,
+      "coins": 200,
+      "rankPoints": 100,
+      "rank": "Bronze",
+      "stats": {
+        "kills": 0,
+        "deaths": 0,
+        "wins": 0,
+        "orbsCollected": 0,
+        "longestLength": 0,
+        "highestScore": 0,
+        "gamesPlayed": 0
+      },
+      "ownedCosmetics": [
+        "skin_neon_blue",
+        "title_beginner"
+      ],
+      "selectedSkin": "neon_blue",
+      "selectedTrail": "none",
+      "selectedTitle": "Beginner",
+      "clanId": null,
+      "online": false,
+      "placementMatchesPlayed": 0,
+      "dailyQuests": [
+        {
+          "id": "q_orbs",
+          "description": "Collect 300 energy orbs",
+          "targetCount": 300,
+          "currentCount": 0,
+          "completed": false,
+          "xpReward": 150,
+          "coinReward": 50,
+          "battlePassXpReward": 100,
+          "type": "orbs"
+        },
+        {
+          "id": "q_kills",
+          "description": "Eliminate 5 enemy snakes",
+          "targetCount": 5,
+          "currentCount": 0,
+          "completed": false,
+          "xpReward": 300,
+          "coinReward": 100,
+          "battlePassXpReward": 200,
+          "type": "kills"
+        },
+        {
+          "id": "q_survive",
+          "description": "Survive in the zone for 10 minutes total",
+          "targetCount": 600,
+          "currentCount": 0,
+          "completed": false,
+          "xpReward": 200,
+          "coinReward": 75,
+          "battlePassXpReward": 150,
+          "type": "survive"
+        },
+        {
+          "id": "q_matches",
+          "description": "Slither through 3 arena matches",
+          "targetCount": 3,
+          "currentCount": 0,
+          "completed": false,
+          "xpReward": 100,
+          "coinReward": 40,
+          "battlePassXpReward": 80,
+          "type": "matches"
+        }
+      ],
+      "academyProgress": {
+        "Movement School": {
+          "completed": false,
+          "score": 0
+        },
+        "Combat School": {
+          "completed": false,
+          "score": 0
+        },
+        "Survival School": {
+          "completed": false,
+          "score": 0
+        },
+        "Advanced Techniques": {
+          "completed": false,
+          "score": 0
+        }
+      }
+    }
+  },
+  "clans": {},
+  "friendRequests": [],
+  "matchesOffline": [],
+  "replays": {}
+}

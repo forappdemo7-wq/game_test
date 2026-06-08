@@ -91,10 +91,17 @@ export default function AppPage() {
     // Spark procedural background ambient drone synth
     SoundManager.startBackgroundMusic();
 
-    const socket = io({
-      path: '/socket.io',
-      transports: ['websocket', 'polling'],
-    });
+    const socket = io(
+  process.env.NEXT_PUBLIC_SERVER_URL ||
+    window.location.origin,
+  {
+    path: '/socket.io',
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+  }
+);
     socketRef.current = socket;
 
     socket.on('connect', () => {
