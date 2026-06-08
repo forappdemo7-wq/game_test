@@ -15,7 +15,7 @@ import { DBInstance, COSMETICS_SHOP, GAME_ACHIEVEMENTS } from './server/store';
 import { GameController } from './server/game';
 
 const dev = process.env.NODE_ENV !== 'production';
-const nextApp = next({ dev, dir: path.resolve(__dirname, '..') });
+const nextApp = next({ dev, dir: process.cwd() });
 const nextHandler = nextApp.getRequestHandler();
 
 async function startServer() {
@@ -431,8 +431,7 @@ async function startServer() {
     if (req.path && req.path.startsWith('/socket.io')) {
       return next();
     }
-    const parsedUrl = parse(req.url || '', true);
-    return nextHandler(req, res, parsedUrl);
+    return nextHandler(req, res);
   });
 
   httpServer.listen(PORT, '0.0.0.0', () => {

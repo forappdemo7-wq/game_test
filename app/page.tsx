@@ -52,22 +52,26 @@ export default function AppPage() {
 
   // Cache user login details locally
   useEffect(() => {
-    const cachedUserId = localStorage.getItem('snake_legends_user_id');
-    const cachedUsername = localStorage.getItem('snake_legends_username');
+    try {
+      const cachedUserId = typeof window !== 'undefined' ? localStorage.getItem('snake_legends_user_id') : null;
+      const cachedUsername = typeof window !== 'undefined' ? localStorage.getItem('snake_legends_username') : null;
 
-    if (cachedUserId) {
-      fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: cachedUserId, username: cachedUsername }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success) {
-            setUser(data.user);
-          }
+      if (cachedUserId) {
+        fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: cachedUserId, username: cachedUsername }),
         })
-        .catch((err) => console.log('Store fallback offline initially', err));
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              setUser(data.user);
+            }
+          })
+          .catch((err) => console.log('Store fallback offline initially', err));
+      }
+    } catch (e) {
+      console.warn('LocalStorage access blocked by sandboxed environment:', e);
     }
   }, []);
 
@@ -81,8 +85,14 @@ export default function AppPage() {
       });
       const data = await res.json();
       if (data.success) {
-        localStorage.setItem('snake_legends_user_id', newUserId);
-        localStorage.setItem('snake_legends_username', username);
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('snake_legends_user_id', newUserId);
+            localStorage.setItem('snake_legends_username', username);
+          }
+        } catch (storageErr) {
+          console.warn('Failed to cache user credentials in LocalStorage:', storageErr);
+        }
         setUser(data.user);
         SoundManager.playVictoryArpeggio();
       }
