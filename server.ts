@@ -205,19 +205,78 @@ async function startServer() {
     res.json(DBInstance.getAdminAnalytics(onlineCounter, activeLobbies));
   });
 
+  // Replays endpoints
+  app.get('/api/replays', (req, res) => {
+    res.json(DBInstance.getAllReplays());
+  });
+
+  app.get('/api/replays/:matchId', (req, res) => {
+    const replay = DBInstance.getReplay(req.params.matchId);
+    if (!replay) {
+      return res.status(404).json({ error: 'Match replay not found' });
+    }
+    res.json(replay);
+  });
+
   // ==========================================
   // REAL-TIME SOCKET.IO HANDLERS
   // ==========================================
 
   const socketPlayerRegistry: Record<string, { userId: string; mode: GameMode }> = {};
+  
+  // Replay buffers map to store server highlighted matches
+  const matchIdMap: Record<string, string> = {
+    [GameMode.CASUAL]: `casual_${Date.now()}`,
+    [GameMode.RANKED]: `ranked_${Date.now()}`,
+    [GameMode.BATTLE_ROYALE]: `br_${Date.now()}`,
+    [GameMode.PRIVATE]: `private_${Date.now()}`,
+  };
+
+  const lobbyReplayBuffers: Record<string, {
+    matchId: string;
+    frames: any[];
+    events: any[];
+  }> = {};
+
+  const getOrCreateBuffer = (mode: GameMode) => {
+    if (!lobbyReplayBuffers[mode]) {
+      lobbyReplayBuffers[mode] = {
+        matchId: matchIdMap[mode] || `${mode}_${Date.now()}`,
+        frames: [],
+        events: []
+      };
+    }
+    return lobbyReplayBuffers[mode];
+  };
 
   GameController.onKill = (mode: GameMode, victimName: string, killerName: string) => {
+    const killId = `kill_${Date.now()}_${Math.random()}`;
     io.to(mode).emit('game:killfeed', {
-      id: `kill_${Date.now()}_${Math.random()}`,
+      id: killId,
       victimName,
       killerName,
       timestamp: Date.now(),
     });
+
+    // Record Event into Replay Buffer
+    const buf = getOrCreateBuffer(mode);
+    buf.events.push({
+      type: 'kill',
+      tick: buf.frames.length,
+      desc: `${killerName.toUpperCase()} disintegrated ${victimName.toUpperCase()}`
+    });
+
+    // Save Replay durably to db store fallbacks when a significant kill happens
+    if (buf.frames.length > 5) {
+      DBInstance.saveReplay(buf.matchId, {
+        matchId: buf.matchId,
+        mode,
+        winnerName: killerName,
+        date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        events: buf.events,
+        frames: buf.frames
+      });
+    }
   };
 
   io.on('connection', (socket) => {
@@ -303,8 +362,14 @@ async function startServer() {
     });
   });
 
+  // Ticks snapshot for replay recording (slided 250ms updates)
+  let serverTicksCounter = 0;
+
   // Authoritative real-time tick replication (20Hz loop)
   setInterval(() => {
+    serverTicksCounter++;
+    const shouldRecordFrame = serverTicksCounter % 4 === 0; // Record at 5Hz to remain extremely light memory footprint
+
     Object.keys(GameController.state).forEach((modeKey) => {
       const mode = modeKey as GameMode;
       const state = GameController.state[mode];
@@ -315,11 +380,56 @@ async function startServer() {
         brZoneRadius: state.brZoneRadius,
         brCenter: state.brCenter,
       });
+
+      // Record snap frame if there's active players slithering
+      if (shouldRecordFrame) {
+        const hasLiveHumans = Object.values(state.players).some(p => !p.isBot);
+        if (hasLiveHumans) {
+          const buf = getOrCreateBuffer(mode);
+          
+          // Capture player coordinate summaries
+          const playersSnapshot: Record<string, any> = {};
+          Object.keys(state.players).forEach((pId) => {
+            const p = state.players[pId];
+            if (!p.isDead) {
+              playersSnapshot[pId] = {
+                x: Math.round(p.x),
+                y: Math.round(p.y),
+                angle: Number(p.angle.toFixed(2)),
+                segments: p.segments.map(seg => ({ x: Math.round(seg.x), y: Math.round(seg.y) })),
+                score: Math.round(p.score)
+              };
+            }
+          });
+
+          // Grab some premium orbs positions
+          const orbsSnapshot = state.orbs.slice(0, 8).map(o => ({
+            id: o.id,
+            x: Math.round(o.x),
+            y: Math.round(o.y),
+            premium: o.isPremium
+          }));
+
+          buf.frames.push({
+            tick: buf.frames.length,
+            players: playersSnapshot,
+            orbs: orbsSnapshot
+          });
+
+          // Limit to max 120 recordings (30 seconds highlights)
+          if (buf.frames.length > 120) {
+            buf.frames.shift();
+          }
+        }
+      }
     });
   }, 50);
 
-  // Fallback direct NextJS request forwarding
-  app.all('*', (req, res) => {
+  // Fallback direct NextJS request forwarding (excl. socket.io)
+  app.all('*', (req, res, next) => {
+    if (req.path && req.path.startsWith('/socket.io')) {
+      return next();
+    }
     return nextHandler(req, res);
   });
 

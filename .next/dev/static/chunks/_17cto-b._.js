@@ -67,6 +67,11 @@ __turbopack_context__.s([
  */ class SoundEffectsController {
     ctx = null;
     soundEnabled = true;
+    ambientOsc1 = null;
+    ambientOsc2 = null;
+    ambientGain = null;
+    ambientFilter = null;
+    lfo = null;
     constructor(){
     // Lazy initialisation to prevent console policies errors before click
     }
@@ -85,9 +90,88 @@ __turbopack_context__.s([
     }
     setSoundEnabled(enabled) {
         this.soundEnabled = enabled;
+        if (!enabled) {
+            this.stopBackgroundMusic();
+        } else {
+            this.startBackgroundMusic();
+        }
     }
     isEnabled() {
         return this.soundEnabled;
+    }
+    // Generates infinite sci-fi dark cosmic ambient synthesizer soundtrack background
+    startBackgroundMusic() {
+        if (!this.soundEnabled) return;
+        this.initContext();
+        if (!this.ctx) return;
+        // Guard duplicate instances
+        if (this.ambientOsc1) return;
+        try {
+            const now = this.ctx.currentTime;
+            this.ambientGain = this.ctx.createGain();
+            this.ambientGain.gain.setValueAtTime(0, now);
+            this.ambientGain.gain.linearRampToValueAtTime(0.04, now + 2.0); // soft 2 second fade-in
+            // Primary deep drone (Triangle)
+            this.ambientOsc1 = this.ctx.createOscillator();
+            this.ambientOsc1.type = 'triangle';
+            this.ambientOsc1.frequency.setValueAtTime(55, now); // A1 note
+            // Secondary fifth drone (Sawtooth)
+            this.ambientOsc2 = this.ctx.createOscillator();
+            this.ambientOsc2.type = 'sawtooth';
+            this.ambientOsc2.frequency.setValueAtTime(82.41, now); // E2 note for high harmony resonance
+            // low pass filters to keep base range sweet and warm
+            this.ambientFilter = this.ctx.createBiquadFilter();
+            this.ambientFilter.type = 'lowpass';
+            this.ambientFilter.frequency.setValueAtTime(140, now);
+            this.ambientFilter.Q.setValueAtTime(3.5, now);
+            // Low frequency modulator to gently sweep lowpass frequency back and forth
+            this.lfo = this.ctx.createOscillator();
+            this.lfo.type = 'sine';
+            this.lfo.frequency.setValueAtTime(0.12, now); // very slow 0.12Hz sweep rate
+            const lfoGain = this.ctx.createGain();
+            lfoGain.gain.setValueAtTime(45, now); // Modulation depth (+/- 45Hz)
+            // Connect LFO sweep depth into ambient filter frequency
+            this.lfo.connect(lfoGain);
+            lfoGain.connect(this.ambientFilter.frequency);
+            // Routing: Oscs -> Lowpass Filter -> Volume Gain -> Speaker output
+            this.ambientOsc1.connect(this.ambientFilter);
+            this.ambientOsc2.connect(this.ambientFilter);
+            this.ambientFilter.connect(this.ambientGain);
+            this.ambientGain.connect(this.ctx.destination);
+            // Start infinite synthesis generators
+            this.ambientOsc1.start(now);
+            this.ambientOsc2.start(now);
+            this.lfo.start(now);
+        } catch (err) {
+            console.warn("Failed synthesizing ambient space background music:", err);
+        }
+    }
+    stopBackgroundMusic() {
+        try {
+            if (this.ambientOsc1) {
+                this.ambientOsc1.stop();
+                this.ambientOsc1.disconnect();
+                this.ambientOsc1 = null;
+            }
+            if (this.ambientOsc2) {
+                this.ambientOsc2.stop();
+                this.ambientOsc2.disconnect();
+                this.ambientOsc2 = null;
+            }
+            if (this.lfo) {
+                this.lfo.stop();
+                this.lfo.disconnect();
+                this.lfo = null;
+            }
+            if (this.ambientGain) {
+                this.ambientGain.disconnect();
+                this.ambientGain = null;
+            }
+            if (this.ambientFilter) {
+                this.ambientFilter.disconnect();
+                this.ambientFilter = null;
+            }
+        } catch (e) {}
     }
     // Brief bright chime on picking up orbs
     playOrbEat() {
@@ -324,7 +408,7 @@ var _s = __turbopack_context__.k.signature();
 ;
 ;
 ;
-const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
+const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound, onWatchReplay })=>{
     _s();
     const [activeTab, setActiveTab] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])('play');
     // Form helpers
@@ -345,6 +429,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
     const [friendsList, setFriendsList] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
     const [friendRequests, setFriendRequests] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
     const [achievements, setAchievements] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
+    const [savedReplays, setSavedReplays] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])({});
     // Fetch contextual features helper
     const syncServerData = async ()=>{
         if (!user) return;
@@ -380,6 +465,11 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
             if (achRes.ok) {
                 const achData = await achRes.json();
                 setAchievements(achData || []);
+            }
+            const replayRes = await fetch('/api/replays');
+            if (replayRes.ok) {
+                const replayData = await replayRes.json();
+                setSavedReplays(replayData || {});
             }
         } catch (e) {
             console.warn('Backend endpoints offline. Using local fallback simulation logic:', e);
@@ -614,14 +704,14 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                     className: "absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:60px_60px]"
                 }, void 0, false, {
                     fileName: "[project]/components/MainMenu.tsx",
-                    lineNumber: 308,
+                    lineNumber: 317,
                     columnNumber: 9
                 }, ("TURBOPACK compile-time value", void 0)),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                     className: "absolute top-[30%] left-[20%] w-[330px] h-[330px] rounded-full bg-[#00f2ff]/10 blur-[120px] pointer-events-none"
                 }, void 0, false, {
                     fileName: "[project]/components/MainMenu.tsx",
-                    lineNumber: 309,
+                    lineNumber: 318,
                     columnNumber: 9
                 }, ("TURBOPACK compile-time value", void 0)),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -635,17 +725,17 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                     className: "w-7 h-7 text-[#00f2ff]"
                                 }, void 0, false, {
                                     fileName: "[project]/components/MainMenu.tsx",
-                                    lineNumber: 314,
+                                    lineNumber: 323,
                                     columnNumber: 15
                                 }, ("TURBOPACK compile-time value", void 0))
                             }, void 0, false, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 313,
+                                lineNumber: 322,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0))
                         }, void 0, false, {
                             fileName: "[project]/components/MainMenu.tsx",
-                            lineNumber: 312,
+                            lineNumber: 321,
                             columnNumber: 11
                         }, ("TURBOPACK compile-time value", void 0)),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h1", {
@@ -657,13 +747,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                     children: "LEGENDS"
                                 }, void 0, false, {
                                     fileName: "[project]/components/MainMenu.tsx",
-                                    lineNumber: 318,
+                                    lineNumber: 327,
                                     columnNumber: 19
                                 }, ("TURBOPACK compile-time value", void 0))
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/MainMenu.tsx",
-                            lineNumber: 317,
+                            lineNumber: 326,
                             columnNumber: 11
                         }, ("TURBOPACK compile-time value", void 0)),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -671,7 +761,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                             children: "AA Multidimensional Realtime Arena"
                         }, void 0, false, {
                             fileName: "[project]/components/MainMenu.tsx",
-                            lineNumber: 320,
+                            lineNumber: 329,
                             columnNumber: 11
                         }, ("TURBOPACK compile-time value", void 0)),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("form", {
@@ -686,7 +776,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                             children: "Glider Callsign / Pilot Tag"
                                         }, void 0, false, {
                                             fileName: "[project]/components/MainMenu.tsx",
-                                            lineNumber: 326,
+                                            lineNumber: 335,
                                             columnNumber: 15
                                         }, ("TURBOPACK compile-time value", void 0)),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -698,13 +788,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                             className: "w-full bg-[#050505] border border-white/10 rounded-none px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-[#00f2ff] focus:ring-1 focus:ring-[#00f2ff] font-medium text-sm transition-all"
                                         }, void 0, false, {
                                             fileName: "[project]/components/MainMenu.tsx",
-                                            lineNumber: 329,
+                                            lineNumber: 338,
                                             columnNumber: 15
                                         }, ("TURBOPACK compile-time value", void 0))
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/components/MainMenu.tsx",
-                                    lineNumber: 325,
+                                    lineNumber: 334,
                                     columnNumber: 13
                                 }, ("TURBOPACK compile-time value", void 0)),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -713,13 +803,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                     children: "Enter Arena"
                                 }, void 0, false, {
                                     fileName: "[project]/components/MainMenu.tsx",
-                                    lineNumber: 339,
+                                    lineNumber: 348,
                                     columnNumber: 13
                                 }, ("TURBOPACK compile-time value", void 0))
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/MainMenu.tsx",
-                            lineNumber: 324,
+                            lineNumber: 333,
                             columnNumber: 11
                         }, ("TURBOPACK compile-time value", void 0)),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -727,19 +817,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                             children: "SYSTEM SECURITY PROTOCOLS LIVE"
                         }, void 0, false, {
                             fileName: "[project]/components/MainMenu.tsx",
-                            lineNumber: 347,
+                            lineNumber: 356,
                             columnNumber: 11
                         }, ("TURBOPACK compile-time value", void 0))
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/MainMenu.tsx",
-                    lineNumber: 311,
+                    lineNumber: 320,
                     columnNumber: 9
                 }, ("TURBOPACK compile-time value", void 0))
             ]
         }, void 0, true, {
             fileName: "[project]/components/MainMenu.tsx",
-            lineNumber: 307,
+            lineNumber: 316,
             columnNumber: 7
         }, ("TURBOPACK compile-time value", void 0));
     }
@@ -752,7 +842,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                 className: "absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:50px_50px] pointer-events-none"
             }, void 0, false, {
                 fileName: "[project]/components/MainMenu.tsx",
-                lineNumber: 360,
+                lineNumber: 369,
                 columnNumber: 7
             }, ("TURBOPACK compile-time value", void 0)),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("aside", {
@@ -769,12 +859,12 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                             className: "w-4.5 h-4.5 text-[#00f2ff]"
                                         }, void 0, false, {
                                             fileName: "[project]/components/MainMenu.tsx",
-                                            lineNumber: 367,
+                                            lineNumber: 376,
                                             columnNumber: 15
                                         }, ("TURBOPACK compile-time value", void 0))
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 366,
+                                        lineNumber: 375,
                                         columnNumber: 13
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -788,13 +878,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "LEGENDS"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 371,
+                                                        lineNumber: 380,
                                                         columnNumber: 23
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 370,
+                                                lineNumber: 379,
                                                 columnNumber: 15
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -802,19 +892,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Cyber Arena Cockpit"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 373,
+                                                lineNumber: 382,
                                                 columnNumber: 15
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 369,
+                                        lineNumber: 378,
                                         columnNumber: 13
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 365,
+                                lineNumber: 374,
                                 columnNumber: 11
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -828,7 +918,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: user.username.slice(0, 2).toUpperCase()
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 381,
+                                                lineNumber: 390,
                                                 columnNumber: 15
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -839,7 +929,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: user.selectedTitle || 'Arena Novice'
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 385,
+                                                        lineNumber: 394,
                                                         columnNumber: 17
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
@@ -847,19 +937,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: user.username
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 388,
+                                                        lineNumber: 397,
                                                         columnNumber: 17
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 384,
+                                                lineNumber: 393,
                                                 columnNumber: 15
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 380,
+                                        lineNumber: 389,
                                         columnNumber: 13
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -872,7 +962,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 395,
+                                                lineNumber: 404,
                                                 columnNumber: 15
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -884,13 +974,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 396,
+                                                lineNumber: 405,
                                                 columnNumber: 15
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 394,
+                                        lineNumber: 403,
                                         columnNumber: 13
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -902,12 +992,12 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                             }
                                         }, void 0, false, {
                                             fileName: "[project]/components/MainMenu.tsx",
-                                            lineNumber: 399,
+                                            lineNumber: 408,
                                             columnNumber: 15
                                         }, ("TURBOPACK compile-time value", void 0))
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 398,
+                                        lineNumber: 407,
                                         columnNumber: 13
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -921,7 +1011,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Coins"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 407,
+                                                        lineNumber: 416,
                                                         columnNumber: 17
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -932,13 +1022,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 408,
+                                                        lineNumber: 417,
                                                         columnNumber: 17
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 406,
+                                                lineNumber: 415,
                                                 columnNumber: 15
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -949,7 +1039,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "ELO Rank"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 411,
+                                                        lineNumber: 420,
                                                         columnNumber: 17
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -957,25 +1047,25 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: user.rank
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 412,
+                                                        lineNumber: 421,
                                                         columnNumber: 17
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 410,
+                                                lineNumber: 419,
                                                 columnNumber: 15
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 405,
+                                        lineNumber: 414,
                                         columnNumber: 13
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 379,
+                                lineNumber: 388,
                                 columnNumber: 11
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("nav", {
@@ -1020,6 +1110,11 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         id: 'profile',
                                         label: 'Pilot Telemetry',
                                         icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$user$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__User$3e$__["User"]
+                                    },
+                                    {
+                                        id: 'replays',
+                                        label: 'Match Replays',
+                                        icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$compass$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Compass$3e$__["Compass"]
                                     }
                                 ].map((btn)=>{
                                     const Icon = btn.icon;
@@ -1035,32 +1130,32 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 className: "w-4 h-4"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 443,
+                                                lineNumber: 453,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                                 children: btn.label
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 444,
+                                                lineNumber: 454,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, btn.id, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 431,
+                                        lineNumber: 441,
                                         columnNumber: 17
                                     }, ("TURBOPACK compile-time value", void 0));
                                 })
                             }, void 0, false, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 417,
+                                lineNumber: 426,
                                 columnNumber: 11
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 364,
+                        lineNumber: 373,
                         columnNumber: 9
                     }, ("TURBOPACK compile-time value", void 0)),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1074,18 +1169,18 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                     className: "w-4 h-4 text-[#00f2ff]"
                                 }, void 0, false, {
                                     fileName: "[project]/components/MainMenu.tsx",
-                                    lineNumber: 457,
+                                    lineNumber: 467,
                                     columnNumber: 29
                                 }, ("TURBOPACK compile-time value", void 0)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$volume$2d$x$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__VolumeX$3e$__["VolumeX"], {
                                     className: "w-4 h-4 text-red-500"
                                 }, void 0, false, {
                                     fileName: "[project]/components/MainMenu.tsx",
-                                    lineNumber: 457,
+                                    lineNumber: 467,
                                     columnNumber: 78
                                 }, ("TURBOPACK compile-time value", void 0))
                             }, void 0, false, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 452,
+                                lineNumber: 462,
                                 columnNumber: 11
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1093,19 +1188,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                 children: "SECURE LINK ACTIVE"
                             }, void 0, false, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 459,
+                                lineNumber: 469,
                                 columnNumber: 11
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 451,
+                        lineNumber: 461,
                         columnNumber: 9
                     }, ("TURBOPACK compile-time value", void 0))
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/MainMenu.tsx",
-                lineNumber: 363,
+                lineNumber: 372,
                 columnNumber: 7
             }, ("TURBOPACK compile-time value", void 0)),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
@@ -1124,7 +1219,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "TACTICAL DEPLOYMENT STATION"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 472,
+                                                lineNumber: 482,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1132,13 +1227,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Aquire cosmic food, dodge high-speed opponents, and slither into the leaderboards."
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 475,
+                                                lineNumber: 485,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 471,
+                                        lineNumber: 481,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1154,27 +1249,27 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 className: "w-3.5 h-3.5"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 483,
+                                                                lineNumber: 493,
                                                                 columnNumber: 61
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             " DAILY QUEST COMS"
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 483,
+                                                        lineNumber: 493,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                                         children: "ACTIVE"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 484,
+                                                        lineNumber: 494,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 482,
+                                                lineNumber: 492,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1187,7 +1282,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: q.description
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 489,
+                                                                lineNumber: 499,
                                                                 columnNumber: 23
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1199,30 +1294,30 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 490,
+                                                                lineNumber: 500,
                                                                 columnNumber: 23
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         ]
                                                     }, q.id, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 488,
+                                                        lineNumber: 498,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0)))
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 486,
+                                                lineNumber: 496,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 481,
+                                        lineNumber: 491,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 470,
+                                lineNumber: 480,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1242,7 +1337,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "Endless Lobby"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 501,
+                                                                lineNumber: 511,
                                                                 columnNumber: 21
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1250,13 +1345,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "Bots online: 12"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 504,
+                                                                lineNumber: 514,
                                                                 columnNumber: 21
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 500,
+                                                        lineNumber: 510,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -1264,7 +1359,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Casual Sandbox"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 506,
+                                                        lineNumber: 516,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1272,13 +1367,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Test your tactical parameters, slither smoothly, vacuum up energy feeds, and destroy system bots. No ELO risk."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 507,
+                                                        lineNumber: 517,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 499,
+                                                lineNumber: 509,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -1287,13 +1382,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Bridge Casual Gate"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 511,
+                                                lineNumber: 521,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 498,
+                                        lineNumber: 508,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1310,7 +1405,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "Competitive Orbit"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 522,
+                                                                lineNumber: 532,
                                                                 columnNumber: 21
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1321,13 +1416,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 525,
+                                                                lineNumber: 535,
                                                                 columnNumber: 21
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 521,
+                                                        lineNumber: 531,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -1335,7 +1430,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Ranked League"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 527,
+                                                        lineNumber: 537,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1343,13 +1438,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Intense ladder matchmaking. Scale placement matches up through Bronze, Platinum, Master, up to Legend."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 528,
+                                                        lineNumber: 538,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 520,
+                                                lineNumber: 530,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -1358,13 +1453,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Inbound Ranked Arena"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 532,
+                                                lineNumber: 542,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 519,
+                                        lineNumber: 529,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1381,7 +1476,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "COLLAPSIBLE MATRIX"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 543,
+                                                                lineNumber: 553,
                                                                 columnNumber: 21
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1389,13 +1484,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "Prize: 🪙 500 Credits"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 546,
+                                                                lineNumber: 556,
                                                                 columnNumber: 21
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 542,
+                                                        lineNumber: 552,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -1403,7 +1498,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Battle Royale Collapse"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 548,
+                                                        lineNumber: 558,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1411,13 +1506,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Survive inside a collapsing solar radiation storm grid limits! Fight off other gliders to capture massive coin checks."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 549,
+                                                        lineNumber: 559,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 541,
+                                                lineNumber: 551,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -1433,13 +1528,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: isBrQueueActive ? 'DEPRESSURIZING LAUNCH TUBES...' : 'Engage Survival Lock'
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 553,
+                                                lineNumber: 563,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 540,
+                                        lineNumber: 550,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1453,7 +1548,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Hangar Codes"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 570,
+                                                        lineNumber: 580,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -1461,7 +1556,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Private Duel Cells"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 573,
+                                                        lineNumber: 583,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1469,7 +1564,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Input an encryption key below to bridge into secure sandbox spaces with invited comrades."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 574,
+                                                        lineNumber: 584,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -1480,13 +1575,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         className: "w-full bg-[#050505] border border-white/10 rounded-none px-3 py-2 text-2xs text-white placeholder-gray-600 focus:outline-none focus:border-[#00f2ff] uppercase font-mono"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 578,
+                                                        lineNumber: 588,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 569,
+                                                lineNumber: 579,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1501,7 +1596,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Host Cell"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 587,
+                                                        lineNumber: 597,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -1513,31 +1608,31 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Join Cell"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 596,
+                                                        lineNumber: 606,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 586,
+                                                lineNumber: 596,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 568,
+                                        lineNumber: 578,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 497,
+                                lineNumber: 507,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 469,
+                        lineNumber: 479,
                         columnNumber: 11
                     }, ("TURBOPACK compile-time value", void 0)),
                     activeTab === 'training' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1550,7 +1645,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "COMBAT EXPEDITIONS ACADEMY"
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 615,
+                                        lineNumber: 625,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1558,13 +1653,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "Refine combat schools of slither, collect safe XP runs, and test advanced dash propulsion. No ranked drop penalties."
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 618,
+                                        lineNumber: 628,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 614,
+                                lineNumber: 624,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1605,7 +1700,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "SCHOOL MODULE"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 638,
+                                                                lineNumber: 648,
                                                                 columnNumber: 25
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             completeData?.completed && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1613,13 +1708,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "★ COMPLETED"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 642,
+                                                                lineNumber: 652,
                                                                 columnNumber: 27
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 637,
+                                                        lineNumber: 647,
                                                         columnNumber: 23
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
@@ -1627,7 +1722,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: school.name
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 647,
+                                                        lineNumber: 657,
                                                         columnNumber: 23
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1635,13 +1730,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: school.desc
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 648,
+                                                        lineNumber: 658,
                                                         columnNumber: 23
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 636,
+                                                lineNumber: 646,
                                                 columnNumber: 21
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1655,7 +1750,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 652,
+                                                        lineNumber: 662,
                                                         columnNumber: 23
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -1664,31 +1759,31 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "ENGAGE MODULE"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 653,
+                                                        lineNumber: 663,
                                                         columnNumber: 23
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 651,
+                                                lineNumber: 661,
                                                 columnNumber: 21
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, school.name, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 632,
+                                        lineNumber: 642,
                                         columnNumber: 19
                                     }, ("TURBOPACK compile-time value", void 0));
                                 })
                             }, void 0, false, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 623,
+                                lineNumber: 633,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 613,
+                        lineNumber: 623,
                         columnNumber: 11
                     }, ("TURBOPACK compile-time value", void 0)),
                     activeTab === 'shop' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1704,7 +1799,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "COSMETIC VAULT DEPLOYMENT"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 672,
+                                                lineNumber: 682,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1712,13 +1807,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Redigitize your slither appearance with premium skins and exhaust fuels."
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 675,
+                                                lineNumber: 685,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 671,
+                                        lineNumber: 681,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1730,13 +1825,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 679,
+                                        lineNumber: 689,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 670,
+                                lineNumber: 680,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -1744,7 +1839,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                 children: "Neon Skin Shells"
                             }, void 0, false, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 684,
+                                lineNumber: 694,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1763,7 +1858,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: item.rarity
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 702,
+                                                        lineNumber: 712,
                                                         columnNumber: 25
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
@@ -1771,7 +1866,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: item.name
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 712,
+                                                        lineNumber: 722,
                                                         columnNumber: 25
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1782,13 +1877,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         }
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 715,
+                                                        lineNumber: 725,
                                                         columnNumber: 25
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 701,
+                                                lineNumber: 711,
                                                 columnNumber: 23
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             equipped ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1796,7 +1891,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "EQUIPPED"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 731,
+                                                lineNumber: 741,
                                                 columnNumber: 25
                                             }, ("TURBOPACK compile-time value", void 0)) : owned ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                                 onClick: ()=>equipItem(item.id),
@@ -1804,7 +1899,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "EQUIP"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 735,
+                                                lineNumber: 745,
                                                 columnNumber: 25
                                             }, ("TURBOPACK compile-time value", void 0)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                                 onClick: ()=>buyItem(item.id, item.cost),
@@ -1817,19 +1912,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 742,
+                                                lineNumber: 752,
                                                 columnNumber: 25
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, item.id, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 697,
+                                        lineNumber: 707,
                                         columnNumber: 21
                                     }, ("TURBOPACK compile-time value", void 0));
                                 })
                             }, void 0, false, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 687,
+                                lineNumber: 697,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -1837,7 +1932,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                 children: "Glowing Engine Exhausts Trails"
                             }, void 0, false, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 755,
+                                lineNumber: 765,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1855,7 +1950,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: item.rarity
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 771,
+                                                        lineNumber: 781,
                                                         columnNumber: 25
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
@@ -1863,13 +1958,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: item.name
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 774,
+                                                        lineNumber: 784,
                                                         columnNumber: 25
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 770,
+                                                lineNumber: 780,
                                                 columnNumber: 23
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             equipped ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1877,7 +1972,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "ACTIVE ENGINE"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 780,
+                                                lineNumber: 790,
                                                 columnNumber: 25
                                             }, ("TURBOPACK compile-time value", void 0)) : owned ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                                 onClick: ()=>equipItem(item.id),
@@ -1885,7 +1980,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "ACTIVATE"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 784,
+                                                lineNumber: 794,
                                                 columnNumber: 25
                                             }, ("TURBOPACK compile-time value", void 0)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                                 onClick: ()=>buyItem(item.id, item.cost),
@@ -1898,25 +1993,25 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 791,
+                                                lineNumber: 801,
                                                 columnNumber: 25
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, item.id, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 766,
+                                        lineNumber: 776,
                                         columnNumber: 21
                                     }, ("TURBOPACK compile-time value", void 0));
                                 })
                             }, void 0, false, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 758,
+                                lineNumber: 768,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 669,
+                        lineNumber: 679,
                         columnNumber: 11
                     }, ("TURBOPACK compile-time value", void 0)),
                     activeTab === 'clans' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1929,7 +2024,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "ALLIANCES & GUILDS CLANS"
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 810,
+                                        lineNumber: 820,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1937,13 +2032,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "Incorporate custom snake alliances, rank on leaderboards, and communicate in secure clan lines."
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 813,
+                                        lineNumber: 823,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 809,
+                                lineNumber: 819,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             myClan ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1960,7 +2055,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "⚔️ CLAN CHANNEL OPENED"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 822,
+                                                        lineNumber: 832,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -1977,13 +2072,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 826,
+                                                                lineNumber: 836,
                                                                 columnNumber: 37
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 825,
+                                                        lineNumber: 835,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1995,7 +2090,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: myClan.leaderName
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 829,
+                                                                lineNumber: 839,
                                                                 columnNumber: 38
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             ". Rank Points accumulated: ",
@@ -2003,14 +2098,14 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: myClan.rankPoints
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 829,
+                                                                lineNumber: 839,
                                                                 columnNumber: 119
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             "."
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 828,
+                                                        lineNumber: 838,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2019,13 +2114,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Leave Alliance"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 831,
+                                                        lineNumber: 841,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 821,
+                                                lineNumber: 831,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2040,7 +2135,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 840,
+                                                        lineNumber: 850,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2053,7 +2148,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                         children: m.username
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                                        lineNumber: 846,
+                                                                        lineNumber: 856,
                                                                         columnNumber: 27
                                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2061,30 +2156,30 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                         children: m.role
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                                        lineNumber: 847,
+                                                                        lineNumber: 857,
                                                                         columnNumber: 27
                                                                     }, ("TURBOPACK compile-time value", void 0))
                                                                 ]
                                                             }, m.userId, true, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 845,
+                                                                lineNumber: 855,
                                                                 columnNumber: 25
                                                             }, ("TURBOPACK compile-time value", void 0)))
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 843,
+                                                        lineNumber: 853,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 839,
+                                                lineNumber: 849,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 820,
+                                        lineNumber: 830,
                                         columnNumber: 17
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2097,12 +2192,12 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                     children: "🛰️ Decrypted coms link"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                    lineNumber: 858,
+                                                    lineNumber: 868,
                                                     columnNumber: 21
                                                 }, ("TURBOPACK compile-time value", void 0))
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 857,
+                                                lineNumber: 867,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2123,7 +2218,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                                            lineNumber: 867,
+                                                                            lineNumber: 877,
                                                                             columnNumber: 27
                                                                         }, ("TURBOPACK compile-time value", void 0)),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2131,13 +2226,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                             children: msg.timestamp
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                                            lineNumber: 868,
+                                                                            lineNumber: 878,
                                                                             columnNumber: 27
                                                                         }, ("TURBOPACK compile-time value", void 0))
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 866,
+                                                                    lineNumber: 876,
                                                                     columnNumber: 25
                                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2145,13 +2240,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     children: msg.message
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 870,
+                                                                    lineNumber: 880,
                                                                     columnNumber: 25
                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                             ]
                                                         }, idx, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 865,
+                                                            lineNumber: 875,
                                                             columnNumber: 23
                                                         }, ("TURBOPACK compile-time value", void 0))),
                                                     (!myClan.chat || myClan.chat.length === 0) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2159,13 +2254,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Signal quiet..."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 874,
+                                                        lineNumber: 884,
                                                         columnNumber: 23
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 863,
+                                                lineNumber: 873,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("form", {
@@ -2181,7 +2276,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         className: "flex-1 bg-[#03040c] border border-[#1c295c] rounded px-3 py-2 text-xs placeholder-gray-600 focus:outline-none focus:border-cyan-500 text-white font-mono"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 881,
+                                                        lineNumber: 891,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2191,30 +2286,30 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                             className: "w-4 h-4"
                                                         }, void 0, false, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 893,
+                                                            lineNumber: 903,
                                                             columnNumber: 23
                                                         }, ("TURBOPACK compile-time value", void 0))
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 889,
+                                                        lineNumber: 899,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 880,
+                                                lineNumber: 890,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 856,
+                                        lineNumber: 866,
                                         columnNumber: 17
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 819,
+                                lineNumber: 829,
                                 columnNumber: 15
                             }, ("TURBOPACK compile-time value", void 0)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: "grid grid-cols-1 md:grid-cols-3 gap-6",
@@ -2227,7 +2322,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Form Alliance"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 901,
+                                                lineNumber: 911,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2235,7 +2330,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Forms an alliance Corp. Costs 🪙 100 Credits to construct telemetry hubs. Join up with wingmen in private chats!"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 904,
+                                                lineNumber: 914,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("form", {
@@ -2249,7 +2344,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "Strategic Alliance Name"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 910,
+                                                                lineNumber: 920,
                                                                 columnNumber: 23
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -2264,13 +2359,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 className: "w-full bg-[#03040a] border border-[#233575] rounded px-3 py-2 text-xs"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 913,
+                                                                lineNumber: 923,
                                                                 columnNumber: 23
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 909,
+                                                        lineNumber: 919,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2280,7 +2375,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "Unique alliance tag (Max 4 characters)"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 923,
+                                                                lineNumber: 933,
                                                                 columnNumber: 23
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -2295,13 +2390,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 className: "w-full bg-[#03040a] border border-[#233575] rounded px-3 py-2 text-xs uppercase text-white font-mono"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 926,
+                                                                lineNumber: 936,
                                                                 columnNumber: 23
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 922,
+                                                        lineNumber: 932,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2311,19 +2406,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Exchange Coins (100)"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 936,
+                                                        lineNumber: 946,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 908,
+                                                lineNumber: 918,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 900,
+                                        lineNumber: 910,
                                         columnNumber: 17
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2334,7 +2429,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Coalition Registry"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 947,
+                                                lineNumber: 957,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2359,13 +2454,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                                     ]
                                                                                 }, void 0, true, {
                                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                                    lineNumber: 959,
+                                                                                    lineNumber: 969,
                                                                                     columnNumber: 41
                                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                                            lineNumber: 958,
+                                                                            lineNumber: 968,
                                                                             columnNumber: 27
                                                                         }, ("TURBOPACK compile-time value", void 0)),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2380,13 +2475,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                                            lineNumber: 961,
+                                                                            lineNumber: 971,
                                                                             columnNumber: 27
                                                                         }, ("TURBOPACK compile-time value", void 0))
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 957,
+                                                                    lineNumber: 967,
                                                                     columnNumber: 25
                                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2395,13 +2490,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     children: "Join alliance"
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 965,
+                                                                    lineNumber: 975,
                                                                     columnNumber: 25
                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                             ]
                                                         }, clan.id, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 953,
+                                                            lineNumber: 963,
                                                             columnNumber: 23
                                                         }, ("TURBOPACK compile-time value", void 0))),
                                                     clansList.length === 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2409,31 +2504,31 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "No tactical alliances formed yet on current sectors."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 974,
+                                                        lineNumber: 984,
                                                         columnNumber: 23
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 951,
+                                                lineNumber: 961,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 946,
+                                        lineNumber: 956,
                                         columnNumber: 17
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 899,
+                                lineNumber: 909,
                                 columnNumber: 15
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 808,
+                        lineNumber: 818,
                         columnNumber: 11
                     }, ("TURBOPACK compile-time value", void 0)),
                     activeTab === 'friends' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2446,7 +2541,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "WINGMEN CONNECTIONS HUB"
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 989,
+                                        lineNumber: 999,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2454,13 +2549,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "Enlist slither compatriots, audit active online telemetry, and submit requests below."
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 992,
+                                        lineNumber: 1002,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 988,
+                                lineNumber: 998,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2474,7 +2569,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Enlist Wingman"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 999,
+                                                lineNumber: 1009,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("form", {
@@ -2489,7 +2584,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         className: "w-full bg-[#03040c] border border-indigo-500/30 rounded px-2.5 py-2 text-2xs text-white uppercase placeholder-gray-600"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1003,
+                                                        lineNumber: 1013,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2498,13 +2593,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Submit Enlist Request"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1010,
+                                                        lineNumber: 1020,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1002,
+                                                lineNumber: 1012,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             friendRequests.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2517,7 +2612,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "INBOUND SIGNALS"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 1021,
+                                                                lineNumber: 1031,
                                                                 columnNumber: 23
                                                             }, ("TURBOPACK compile-time value", void 0)),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2525,13 +2620,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 children: "(!)"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 1022,
+                                                                lineNumber: 1032,
                                                                 columnNumber: 23
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1020,
+                                                        lineNumber: 1030,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     friendRequests.map((req)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2542,7 +2637,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     children: req.fromName
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1026,
+                                                                    lineNumber: 1036,
                                                                     columnNumber: 25
                                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2551,25 +2646,25 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     children: "Enlist"
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1027,
+                                                                    lineNumber: 1037,
                                                                     columnNumber: 25
                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                             ]
                                                         }, req.id, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1025,
+                                                            lineNumber: 1035,
                                                             columnNumber: 23
                                                         }, ("TURBOPACK compile-time value", void 0)))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1019,
+                                                lineNumber: 1029,
                                                 columnNumber: 19
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 998,
+                                        lineNumber: 1008,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2580,7 +2675,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "Holographic Friends Grid"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1040,
+                                                lineNumber: 1050,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2597,20 +2692,20 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                             children: friend.username.slice(0, 2).toUpperCase()
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                                            lineNumber: 1051,
+                                                                            lineNumber: 1061,
                                                                             columnNumber: 25
                                                                         }, ("TURBOPACK compile-time value", void 0)),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                                                             className: `absolute bottom-0 right-0 w-3 h-3 border-2 border-indigo-950 rounded-full ${friend.status === 'online' ? 'bg-emerald-400' : 'bg-gray-500'}`
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                                            lineNumber: 1054,
+                                                                            lineNumber: 1064,
                                                                             columnNumber: 25
                                                                         }, ("TURBOPACK compile-time value", void 0))
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1050,
+                                                                    lineNumber: 1060,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2621,7 +2716,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                             children: friend.username
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                                            lineNumber: 1061,
+                                                                            lineNumber: 1071,
                                                                             columnNumber: 25
                                                                         }, ("TURBOPACK compile-time value", void 0)),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
@@ -2634,7 +2729,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                                     ]
                                                                                 }, void 0, true, {
                                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                                    lineNumber: 1063,
+                                                                                    lineNumber: 1073,
                                                                                     columnNumber: 27
                                                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
@@ -2642,25 +2737,25 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                                     children: friend.rank
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                                    lineNumber: 1064,
+                                                                                    lineNumber: 1074,
                                                                                     columnNumber: 27
                                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                                            lineNumber: 1062,
+                                                                            lineNumber: 1072,
                                                                             columnNumber: 25
                                                                         }, ("TURBOPACK compile-time value", void 0))
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1060,
+                                                                    lineNumber: 1070,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                             ]
                                                         }, friend.friendId, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1046,
+                                                            lineNumber: 1056,
                                                             columnNumber: 21
                                                         }, ("TURBOPACK compile-time value", void 0))),
                                                     friendsList.length === 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2668,31 +2763,31 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "No wingmen linked inside sector index files yet."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1070,
+                                                        lineNumber: 1080,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1044,
+                                                lineNumber: 1054,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1039,
+                                        lineNumber: 1049,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 997,
+                                lineNumber: 1007,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 987,
+                        lineNumber: 997,
                         columnNumber: 11
                     }, ("TURBOPACK compile-time value", void 0)),
                     activeTab === 'leaderboards' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2705,7 +2800,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "GLOBAL LEADERBOARDS"
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1084,
+                                        lineNumber: 1094,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2713,13 +2808,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "Audit elite gliders, longest loops recorded, high-density scores, and global coalition alliances."
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1087,
+                                        lineNumber: 1097,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 1083,
+                                lineNumber: 1093,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2735,7 +2830,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "HIGH LEVEL PILOTS"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1096,
+                                                        lineNumber: 1106,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2743,13 +2838,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "LV / XP"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1097,
+                                                        lineNumber: 1107,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1095,
+                                                lineNumber: 1105,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2768,7 +2863,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1102,
+                                                                    lineNumber: 1112,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2779,13 +2874,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1103,
+                                                                    lineNumber: 1113,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                             ]
                                                         }, item.id, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1101,
+                                                            lineNumber: 1111,
                                                             columnNumber: 21
                                                         }, ("TURBOPACK compile-time value", void 0))),
                                                     (!leaderboards?.global || leaderboards.global.length === 0) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2793,19 +2888,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Scanning satellite telemetry files..."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1107,
+                                                        lineNumber: 1117,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1099,
+                                                lineNumber: 1109,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1094,
+                                        lineNumber: 1104,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2818,7 +2913,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "HIGH DENSITY MASS"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1115,
+                                                        lineNumber: 1125,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2826,13 +2921,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "RECORD HP"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1116,
+                                                        lineNumber: 1126,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1114,
+                                                lineNumber: 1124,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2851,7 +2946,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1121,
+                                                                    lineNumber: 1131,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2862,13 +2957,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1122,
+                                                                    lineNumber: 1132,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                             ]
                                                         }, item.id, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1120,
+                                                            lineNumber: 1130,
                                                             columnNumber: 21
                                                         }, ("TURBOPACK compile-time value", void 0))),
                                                     (!leaderboards?.scores || leaderboards.scores.length === 0) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2876,19 +2971,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Retrieving density stats..."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1126,
+                                                        lineNumber: 1136,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1118,
+                                                lineNumber: 1128,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1113,
+                                        lineNumber: 1123,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2901,7 +2996,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "ALLIANCES ALL-STARS"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1134,
+                                                        lineNumber: 1144,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2909,13 +3004,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "RP LEVEL"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1135,
+                                                        lineNumber: 1145,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1133,
+                                                lineNumber: 1143,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2937,7 +3032,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1140,
+                                                                    lineNumber: 1150,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2948,13 +3043,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1141,
+                                                                    lineNumber: 1151,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                             ]
                                                         }, item.id, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1139,
+                                                            lineNumber: 1149,
                                                             columnNumber: 21
                                                         }, ("TURBOPACK compile-time value", void 0))),
                                                     (!leaderboards?.clans || leaderboards.clans.length === 0) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2962,31 +3057,31 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "Scanning guild databases..."
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1145,
+                                                        lineNumber: 1155,
                                                         columnNumber: 21
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1137,
+                                                lineNumber: 1147,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1132,
+                                        lineNumber: 1142,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 1092,
+                                lineNumber: 1102,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 1082,
+                        lineNumber: 1092,
                         columnNumber: 11
                     }, ("TURBOPACK compile-time value", void 0)),
                     activeTab === 'achievements' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2999,7 +3094,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "HALL OF COSMIC ACHIEVEMENT"
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1157,
+                                        lineNumber: 1167,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3007,13 +3102,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "Review telemetry goals, unlock credit payouts, and level badges."
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1160,
+                                        lineNumber: 1170,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 1156,
+                                lineNumber: 1166,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3031,12 +3126,12 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                 className: "w-5 h-5"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                                lineNumber: 1177,
+                                                                lineNumber: 1187,
                                                                 columnNumber: 23
                                                             }, ("TURBOPACK compile-time value", void 0))
                                                         }, void 0, false, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1176,
+                                                            lineNumber: 1186,
                                                             columnNumber: 21
                                                         }, ("TURBOPACK compile-time value", void 0)),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3046,7 +3141,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     children: ach.title
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1180,
+                                                                    lineNumber: 1190,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3054,19 +3149,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                                     children: ach.description
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                                    lineNumber: 1181,
+                                                                    lineNumber: 1191,
                                                                     columnNumber: 23
                                                                 }, ("TURBOPACK compile-time value", void 0))
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1179,
+                                                            lineNumber: 1189,
                                                             columnNumber: 21
                                                         }, ("TURBOPACK compile-time value", void 0))
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                    lineNumber: 1175,
+                                                    lineNumber: 1185,
                                                     columnNumber: 19
                                                 }, ("TURBOPACK compile-time value", void 0)),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3077,7 +3172,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                             children: "★ COMPLETED"
                                                         }, void 0, false, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1187,
+                                                            lineNumber: 1197,
                                                             columnNumber: 23
                                                         }, ("TURBOPACK compile-time value", void 0)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                                             className: "text-gray-500 tracking-widest text-3xs uppercase font-sans",
@@ -3089,7 +3184,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1191,
+                                                            lineNumber: 1201,
                                                             columnNumber: 23
                                                         }, ("TURBOPACK compile-time value", void 0)),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3101,19 +3196,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/components/MainMenu.tsx",
-                                                            lineNumber: 1195,
+                                                            lineNumber: 1205,
                                                             columnNumber: 21
                                                         }, ("TURBOPACK compile-time value", void 0))
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/components/MainMenu.tsx",
-                                                    lineNumber: 1185,
+                                                    lineNumber: 1195,
                                                     columnNumber: 19
                                                 }, ("TURBOPACK compile-time value", void 0))
                                             ]
                                         }, ach.id, true, {
                                             fileName: "[project]/components/MainMenu.tsx",
-                                            lineNumber: 1167,
+                                            lineNumber: 1177,
                                             columnNumber: 17
                                         }, ("TURBOPACK compile-time value", void 0))),
                                     achievements.length === 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3121,19 +3216,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "Loading pilot award registries..."
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1200,
+                                        lineNumber: 1210,
                                         columnNumber: 17
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 1165,
+                                lineNumber: 1175,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 1155,
+                        lineNumber: 1165,
                         columnNumber: 11
                     }, ("TURBOPACK compile-time value", void 0)),
                     activeTab === 'profile' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3146,7 +3241,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "TELEMETRY DIAGNOSTICS"
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1212,
+                                        lineNumber: 1222,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3154,13 +3249,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                         children: "Audit system values, slither lengths, combat statistics, and pilot accounts records."
                                     }, void 0, false, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1215,
+                                        lineNumber: 1225,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 1211,
+                                lineNumber: 1221,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3173,7 +3268,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "PILOT STATS HISTORIC FILE"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1222,
+                                                lineNumber: 1232,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3181,13 +3276,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 children: "DECRYPTED"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1223,
+                                                lineNumber: 1233,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1221,
+                                        lineNumber: 1231,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3201,7 +3296,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "TOTAL KILLS SECURED"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1228,
+                                                        lineNumber: 1238,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3212,13 +3307,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1229,
+                                                        lineNumber: 1239,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1227,
+                                                lineNumber: 1237,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3229,7 +3324,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "ARENA CHIPS EXCLUDED"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1232,
+                                                        lineNumber: 1242,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3240,13 +3335,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1233,
+                                                        lineNumber: 1243,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1231,
+                                                lineNumber: 1241,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3257,7 +3352,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "VICTORIES CONQUERED"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1236,
+                                                        lineNumber: 1246,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3268,13 +3363,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1237,
+                                                        lineNumber: 1247,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1235,
+                                                lineNumber: 1245,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3285,7 +3380,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "MAX ENERGY MASS RECORD"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1240,
+                                                        lineNumber: 1250,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3296,13 +3391,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1241,
+                                                        lineNumber: 1251,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1239,
+                                                lineNumber: 1249,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3313,7 +3408,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "TOTAL COSMIC ORBS"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1244,
+                                                        lineNumber: 1254,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3324,13 +3419,13 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1245,
+                                                        lineNumber: 1255,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1243,
+                                                lineNumber: 1253,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3341,7 +3436,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         children: "PILOTING EXPERIENCE"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1248,
+                                                        lineNumber: 1258,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0)),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3352,19 +3447,19 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/MainMenu.tsx",
-                                                        lineNumber: 1249,
+                                                        lineNumber: 1259,
                                                         columnNumber: 19
                                                     }, ("TURBOPACK compile-time value", void 0))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1247,
+                                                lineNumber: 1257,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1226,
+                                        lineNumber: 1236,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0)),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3377,7 +3472,7 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1254,
+                                                lineNumber: 1264,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0)),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3387,41 +3482,284 @@ const MainMenu = ({ user, onLogin, onJoinGame, soundEnabled, onToggleSound })=>{
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/MainMenu.tsx",
-                                                lineNumber: 1255,
+                                                lineNumber: 1265,
                                                 columnNumber: 17
                                             }, ("TURBOPACK compile-time value", void 0))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/MainMenu.tsx",
-                                        lineNumber: 1253,
+                                        lineNumber: 1263,
                                         columnNumber: 15
                                     }, ("TURBOPACK compile-time value", void 0))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/MainMenu.tsx",
-                                lineNumber: 1220,
+                                lineNumber: 1230,
                                 columnNumber: 13
                             }, ("TURBOPACK compile-time value", void 0))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/MainMenu.tsx",
-                        lineNumber: 1210,
+                        lineNumber: 1220,
+                        columnNumber: 11
+                    }, ("TURBOPACK compile-time value", void 0)),
+                    activeTab === 'replays' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "space-y-6 max-w-4xl animate-fade-in font-mono text-xs text-slate-300",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
+                                        className: "text-2xl font-black uppercase tracking-wider text-[#00f2ff] mb-1 font-sans",
+                                        children: "TACTICAL REPLAYS LOG"
+                                    }, void 0, false, {
+                                        fileName: "[project]/components/MainMenu.tsx",
+                                        lineNumber: 1275,
+                                        columnNumber: 15
+                                    }, ("TURBOPACK compile-time value", void 0)),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                        className: "text-gray-400 text-xs font-sans",
+                                        children: "Access stored holographic match highlights. Reconstruct player slithers, disintegrations and flight vectors locally."
+                                    }, void 0, false, {
+                                        fileName: "[project]/components/MainMenu.tsx",
+                                        lineNumber: 1278,
+                                        columnNumber: 15
+                                    }, ("TURBOPACK compile-time value", void 0))
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/components/MainMenu.tsx",
+                                lineNumber: 1274,
+                                columnNumber: 13
+                            }, ("TURBOPACK compile-time value", void 0)),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "bg-[#0c0d16] border border-[#00f2ff]/20 p-5 rounded-none",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                        className: "text-xs font-bold text-gray-300 uppercase tracking-widest border-b border-[#00f2ff]/10 pb-2 flex justify-between font-sans mb-4",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                children: "AUTHENTIC MATCH CHANNELS"
+                                            }, void 0, false, {
+                                                fileName: "[project]/components/MainMenu.tsx",
+                                                lineNumber: 1285,
+                                                columnNumber: 17
+                                            }, ("TURBOPACK compile-time value", void 0)),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "text-[#00f2ff]",
+                                                children: "ARCHIVE LIVE"
+                                            }, void 0, false, {
+                                                fileName: "[project]/components/MainMenu.tsx",
+                                                lineNumber: 1286,
+                                                columnNumber: 17
+                                            }, ("TURBOPACK compile-time value", void 0))
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/components/MainMenu.tsx",
+                                        lineNumber: 1284,
+                                        columnNumber: 15
+                                    }, ("TURBOPACK compile-time value", void 0)),
+                                    Object.keys(savedReplays).length === 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "text-center py-16 text-gray-500 font-sans uppercase tracking-widest bg-black/40 border border-white/5 space-y-3",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                className: "text-sm font-black text-gray-450",
+                                                children: "no stored tapes compiled"
+                                            }, void 0, false, {
+                                                fileName: "[project]/components/MainMenu.tsx",
+                                                lineNumber: 1291,
+                                                columnNumber: 19
+                                            }, ("TURBOPACK compile-time value", void 0)),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                className: "text-2xs text-gray-600",
+                                                children: "Replays are recorded automatically during matches upon eliminations!"
+                                            }, void 0, false, {
+                                                fileName: "[project]/components/MainMenu.tsx",
+                                                lineNumber: 1292,
+                                                columnNumber: 19
+                                            }, ("TURBOPACK compile-time value", void 0))
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/components/MainMenu.tsx",
+                                        lineNumber: 1290,
+                                        columnNumber: 17
+                                    }, ("TURBOPACK compile-time value", void 0)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "grid grid-cols-1 md:grid-cols-2 gap-4",
+                                        children: Object.values(savedReplays).map((replay)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "bg-black/50 border border-white/5 hover:border-[#00f2ff]/30 p-4 relative flex flex-col justify-between transition-all group",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "space-y-2",
+                                                        children: [
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                className: "flex justify-between items-start font-sans",
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        className: "text-[10px] font-black tracking-widest text-[#00f2ff] uppercase",
+                                                                        children: [
+                                                                            replay.mode.replace('_', ' '),
+                                                                            " MODE"
+                                                                        ]
+                                                                    }, void 0, true, {
+                                                                        fileName: "[project]/components/MainMenu.tsx",
+                                                                        lineNumber: 1303,
+                                                                        columnNumber: 27
+                                                                    }, ("TURBOPACK compile-time value", void 0)),
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        className: "text-[10px] text-gray-500 font-mono",
+                                                                        children: replay.date
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/components/MainMenu.tsx",
+                                                                        lineNumber: 1306,
+                                                                        columnNumber: 27
+                                                                    }, ("TURBOPACK compile-time value", void 0))
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/components/MainMenu.tsx",
+                                                                lineNumber: 1302,
+                                                                columnNumber: 25
+                                                            }, ("TURBOPACK compile-time value", void 0)),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                className: "border-[#00f2ff]/5 bg-black/30 border p-2 text-2xs truncate",
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        className: "text-gray-500",
+                                                                        children: "WINNER: "
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/components/MainMenu.tsx",
+                                                                        lineNumber: 1312,
+                                                                        columnNumber: 27
+                                                                    }, ("TURBOPACK compile-time value", void 0)),
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        className: "text-emerald-400 font-black",
+                                                                        children: replay.winnerName.toUpperCase()
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/components/MainMenu.tsx",
+                                                                        lineNumber: 1313,
+                                                                        columnNumber: 27
+                                                                    }, ("TURBOPACK compile-time value", void 0))
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/components/MainMenu.tsx",
+                                                                lineNumber: 1311,
+                                                                columnNumber: 25
+                                                            }, ("TURBOPACK compile-time value", void 0)),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                className: "text-3xs text-gray-500 flex justify-between",
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        children: [
+                                                                            "SNAPSHOTS: ",
+                                                                            replay.frames?.length || 0,
+                                                                            " TILES"
+                                                                        ]
+                                                                    }, void 0, true, {
+                                                                        fileName: "[project]/components/MainMenu.tsx",
+                                                                        lineNumber: 1317,
+                                                                        columnNumber: 27
+                                                                    }, ("TURBOPACK compile-time value", void 0)),
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        children: [
+                                                                            "INCIDENTS: ",
+                                                                            replay.events?.length || 0,
+                                                                            " LOGS"
+                                                                        ]
+                                                                    }, void 0, true, {
+                                                                        fileName: "[project]/components/MainMenu.tsx",
+                                                                        lineNumber: 1318,
+                                                                        columnNumber: 27
+                                                                    }, ("TURBOPACK compile-time value", void 0))
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/components/MainMenu.tsx",
+                                                                lineNumber: 1316,
+                                                                columnNumber: 25
+                                                            }, ("TURBOPACK compile-time value", void 0)),
+                                                            replay.events && replay.events.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                className: "mt-3 bg-red-950/20 border border-red-500/15 p-2 text-[10px] font-mono text-red-300 max-h-16 overflow-y-auto",
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        className: "text-[9px] uppercase text-red-400 font-bold block mb-1",
+                                                                        children: "ELIMINATIONS STATE"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/components/MainMenu.tsx",
+                                                                        lineNumber: 1323,
+                                                                        columnNumber: 29
+                                                                    }, ("TURBOPACK compile-time value", void 0)),
+                                                                    replay.events.map((ev, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "truncate",
+                                                                            children: [
+                                                                                "• [T+",
+                                                                                ev.tick,
+                                                                                "] ",
+                                                                                ev.desc
+                                                                            ]
+                                                                        }, idx, true, {
+                                                                            fileName: "[project]/components/MainMenu.tsx",
+                                                                            lineNumber: 1325,
+                                                                            columnNumber: 31
+                                                                        }, ("TURBOPACK compile-time value", void 0)))
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/components/MainMenu.tsx",
+                                                                lineNumber: 1322,
+                                                                columnNumber: 27
+                                                            }, ("TURBOPACK compile-time value", void 0))
+                                                        ]
+                                                    }, void 0, true, {
+                                                        fileName: "[project]/components/MainMenu.tsx",
+                                                        lineNumber: 1301,
+                                                        columnNumber: 23
+                                                    }, ("TURBOPACK compile-time value", void 0)),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                        onClick: ()=>{
+                                                            if (onWatchReplay) {
+                                                                __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].playVictoryArpeggio();
+                                                                onWatchReplay(replay.matchId);
+                                                            }
+                                                        },
+                                                        className: "mt-4 w-full py-2.5 bg-gradient-to-r from-cyan-950 to-indigo-950 border border-cyan-500/35 text-white hover:border-[#00f2ff] hover:from-cyan-900 font-sans font-bold text-center uppercase tracking-widest transition-all text-3xs cursor-pointer",
+                                                        children: "LAUNCH RECODE SPECTATE"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/MainMenu.tsx",
+                                                        lineNumber: 1333,
+                                                        columnNumber: 23
+                                                    }, ("TURBOPACK compile-time value", void 0))
+                                                ]
+                                            }, replay.matchId, true, {
+                                                fileName: "[project]/components/MainMenu.tsx",
+                                                lineNumber: 1297,
+                                                columnNumber: 21
+                                            }, ("TURBOPACK compile-time value", void 0)))
+                                    }, void 0, false, {
+                                        fileName: "[project]/components/MainMenu.tsx",
+                                        lineNumber: 1295,
+                                        columnNumber: 17
+                                    }, ("TURBOPACK compile-time value", void 0))
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/components/MainMenu.tsx",
+                                lineNumber: 1283,
+                                columnNumber: 13
+                            }, ("TURBOPACK compile-time value", void 0))
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/components/MainMenu.tsx",
+                        lineNumber: 1273,
                         columnNumber: 11
                     }, ("TURBOPACK compile-time value", void 0))
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/MainMenu.tsx",
-                lineNumber: 466,
+                lineNumber: 476,
                 columnNumber: 7
             }, ("TURBOPACK compile-time value", void 0))
         ]
     }, void 0, true, {
         fileName: "[project]/components/MainMenu.tsx",
-        lineNumber: 359,
+        lineNumber: 368,
         columnNumber: 5
     }, ("TURBOPACK compile-time value", void 0));
 };
-_s(MainMenu, "OAJZS5X0gr7+qaqRGp0P79KK2D0=");
+_s(MainMenu, "drMMx965MxS9kne6cyY5CuK7I4Y=");
 _c = MainMenu;
 var _c;
 __turbopack_context__.k.register(_c, "MainMenu");
@@ -6004,6 +6342,8 @@ function AppPage() {
     const socketRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
     const [soundEnabled, setSoundEnabled] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(true);
     const [isAdminPanelOpen, setIsAdminPanelOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [isReplaying, setIsReplaying] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const replayIntervalRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
     // Cache user login details locally
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "AppPage.useEffect": ()=>{
@@ -6063,13 +6403,17 @@ function AppPage() {
         setCurrentGameMode(mode);
         setRoomCode(selectedRoomCode || null);
         setIsPlaying(true);
+        setIsReplaying(false);
         setPlayers({});
         setOrbs([]);
         setChatMessages([]);
         setKillFeed([]);
+        // Spark procedural background ambient drone synth
+        __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].startBackgroundMusic();
         const socket = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$socket$2e$io$2d$client$2f$build$2f$esm$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["io"])({
             path: '/socket.io',
             transports: [
+                'polling',
                 'websocket'
             ]
         });
@@ -6084,6 +6428,9 @@ function AppPage() {
                 trail: user.selectedTrail,
                 title: user.selectedTitle
             });
+        });
+        socket.on('connect_error', (err)=>{
+            console.warn('Orbital sockets connect error:', err);
         });
         socket.on('game:state', (state)=>{
             setPlayers(state.players);
@@ -6110,6 +6457,110 @@ function AppPage() {
             console.log('Orbital sockets disconnected.');
         });
     };
+    const handleWatchReplay = async (matchId)=>{
+        if (!user) return;
+        setIsPlaying(true);
+        setIsReplaying(true);
+        setPlayers({});
+        setOrbs([]);
+        setChatMessages([]);
+        setKillFeed([]);
+        __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].startBackgroundMusic();
+        try {
+            const res = await fetch(`/api/replays/${matchId}`);
+            if (!res.ok) {
+                alert("Could not load selected replay files on the server.");
+                handleExitGame();
+                return;
+            }
+            const data = await res.json();
+            if (!data || !data.frames || data.frames.length === 0) {
+                alert("This record contains no slither snapshots.");
+                handleExitGame();
+                return;
+            }
+            setKillFeed([
+                {
+                    id: 'replay_init_evt',
+                    victimName: 'COSMIC RECORDER',
+                    killerName: 'SPECTATE BOOT',
+                    timestamp: Date.now()
+                }
+            ]);
+            let frameIdx = 0;
+            if (replayIntervalRef.current) {
+                clearInterval(replayIntervalRef.current);
+            }
+            replayIntervalRef.current = setInterval(()=>{
+                const frame = data.frames[frameIdx];
+                if (!frame) {
+                    clearInterval(replayIntervalRef.current);
+                    replayIntervalRef.current = null;
+                    alert("Replay sequence completed.");
+                    handleExitGame();
+                    return;
+                }
+                // Map Replay state frame to snake structures
+                const activePlayers = {};
+                Object.keys(frame.players).forEach((pId)=>{
+                    const raw = frame.players[pId];
+                    activePlayers[pId] = {
+                        id: pId,
+                        name: pId === 'world_boss_hydra' ? 'NEON HYDRA' : pId.includes('bot') ? 'SYSTEM BOT' : pId,
+                        x: raw.x,
+                        y: raw.y,
+                        angle: raw.angle,
+                        segments: raw.segments,
+                        score: raw.score,
+                        length: raw.segments.length,
+                        speed: 4,
+                        skin: pId === 'world_boss_hydra' ? 'galaxy' : 'neon_blue',
+                        trail: 'glow',
+                        title: pId === 'world_boss_hydra' ? 'WORLD BOSS [RAID]' : 'SPECTATE REC',
+                        isDead: false,
+                        isBot: pId.includes('bot'),
+                        isBoss: pId === 'world_boss_hydra',
+                        kills: 0,
+                        rank: 'BRONZE',
+                        level: 1,
+                        respawnTimer: 0,
+                        abilities: {
+                            shield: {
+                                active: false,
+                                duration: 0
+                            },
+                            magnet: {
+                                active: false,
+                                duration: 0
+                            },
+                            ghost: {
+                                active: false,
+                                duration: 0
+                            },
+                            dash: {
+                                active: false,
+                                duration: 0
+                            }
+                        }
+                    };
+                });
+                const activeOrbs = frame.orbs.map((o)=>({
+                        id: o.id,
+                        x: o.x,
+                        y: o.y,
+                        value: o.premium ? 10 : 3,
+                        color: o.premium ? '#fbbf24' : '#38bdf8',
+                        isPremium: o.premium
+                    }));
+                setPlayers(activePlayers);
+                setOrbs(activeOrbs);
+                frameIdx++;
+            }, 200); // Renders smoothly at recorded snapshot frequencies
+        } catch (e) {
+            console.warn("Spectator play failed:", e);
+            handleExitGame();
+        }
+    };
     const handleInputChange = (angle, isBoosting)=>{
         if (socketRef.current && socketRef.current.connected) {
             socketRef.current.emit('player:input', {
@@ -6134,11 +6585,20 @@ function AppPage() {
         }
     };
     const handleExitGame = ()=>{
+        // Teardown normal sockets
         if (socketRef.current) {
             socketRef.current.disconnect();
             socketRef.current = null;
         }
+        // Teardown replay player simulation intervals
+        if (replayIntervalRef.current) {
+            clearInterval(replayIntervalRef.current);
+            replayIntervalRef.current = null;
+        }
         setIsPlaying(false);
+        setIsReplaying(false);
+        // Stop ambient synthesizers music loop
+        __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].stopBackgroundMusic();
         if (user) {
             fetch(`/api/users/${user.id}`).then((res)=>res.json()).then((freshUser)=>{
                 if (freshUser && !freshUser.error) {
@@ -6167,7 +6627,7 @@ function AppPage() {
                     onInputChange: handleInputChange
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 185,
+                    lineNumber: 308,
                     columnNumber: 11
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$GameUI$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["GameUI"], {
@@ -6184,13 +6644,13 @@ function AppPage() {
                     killFeed: killFeed
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 194,
+                    lineNumber: 317,
                     columnNumber: 11
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/app/page.tsx",
-            lineNumber: 184,
+            lineNumber: 307,
             columnNumber: 9
         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
             className: "relative w-full h-full select-none",
@@ -6200,10 +6660,11 @@ function AppPage() {
                     onLogin: handleLogin,
                     onJoinGame: handleJoinGame,
                     soundEnabled: soundEnabled,
-                    onToggleSound: handleToggleSound
+                    onToggleSound: handleToggleSound,
+                    onWatchReplay: handleWatchReplay
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 210,
+                    lineNumber: 333,
                     columnNumber: 11
                 }, this),
                 user && user.role === 'admin' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -6217,12 +6678,12 @@ function AppPage() {
                         className: "w-5.5 h-5.5 animate-pulse"
                     }, void 0, false, {
                         fileName: "[project]/app/page.tsx",
-                        lineNumber: 227,
+                        lineNumber: 351,
                         columnNumber: 15
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 219,
+                    lineNumber: 343,
                     columnNumber: 13
                 }, this),
                 isAdminPanelOpen && user && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$AdminPanel$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["AdminPanel"], {
@@ -6230,22 +6691,22 @@ function AppPage() {
                     onClose: ()=>setIsAdminPanelOpen(false)
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 232,
+                    lineNumber: 356,
                     columnNumber: 13
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/app/page.tsx",
-            lineNumber: 209,
+            lineNumber: 332,
             columnNumber: 9
         }, this)
     }, void 0, false, {
         fileName: "[project]/app/page.tsx",
-        lineNumber: 182,
+        lineNumber: 305,
         columnNumber: 5
     }, this);
 }
-_s(AppPage, "78rPMAAQlgBQQAKzib4nClocrA8=");
+_s(AppPage, "/GoA9ZkxJH8kJo2tYyfRD6VBgzc=");
 _c = AppPage;
 var _c;
 __turbopack_context__.k.register(_c, "AppPage");
