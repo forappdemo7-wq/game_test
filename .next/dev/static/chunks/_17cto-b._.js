@@ -6344,6 +6344,18 @@ function AppPage() {
     const [isAdminPanelOpen, setIsAdminPanelOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [isReplaying, setIsReplaying] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const replayIntervalRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
+    // Fallback high performance offline client simulation state references
+    const [isOfflineMode, setIsOfflineMode] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const localSimIntervalRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
+    const simStateRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])({
+        players: {},
+        orbs: [],
+        brZoneRadius: 1500,
+        brCenter: {
+            x: 1500,
+            y: 1500
+        }
+    });
     // Cache user login details locally
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "AppPage.useEffect": ()=>{
@@ -6398,6 +6410,570 @@ function AppPage() {
             console.log('Failing to bind login', e);
         }
     };
+    const setLocalStats = (xpGained, coinsGained, isKill = false)=>{
+        if (!user) return;
+        setUser((prev)=>{
+            if (!prev) return null;
+            let newXp = prev.xp + xpGained;
+            let newLevel = prev.level;
+            let newCoins = prev.coins + coinsGained;
+            let newKills = prev.stats.kills + (isKill ? 1 : 0);
+            let newOrbsCollected = prev.stats.orbsCollected + (isKill ? 0 : 1);
+            let xpNeeded = newLevel * 250;
+            while(newXp >= xpNeeded && newLevel < 100){
+                newXp -= xpNeeded;
+                newLevel += 1;
+                newCoins += newLevel * 50;
+                xpNeeded = newLevel * 250;
+            }
+            const updated = {
+                ...prev,
+                xp: newXp,
+                level: newLevel,
+                coins: newCoins,
+                stats: {
+                    ...prev.stats,
+                    kills: newKills,
+                    orbsCollected: newOrbsCollected
+                }
+            };
+            // Lazy notify fallback DB
+            fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    id: updated.id,
+                    username: updated.username
+                })
+            }).then(()=>{
+                if (isKill) {
+                    fetch('/api/training/complete', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            userId: updated.id,
+                            lessonName: 'Combat School',
+                            scoreObtained: 100
+                        })
+                    }).catch((e)=>console.log('Stat increment offline update catch:', e));
+                }
+            }).catch((e)=>console.log('Sync profile catch:', e));
+            return updated;
+        });
+    };
+    const disintegrateOffline = (playerId, killerName)=>{
+        const currentSimState = simStateRef.current;
+        const p = currentSimState.players[playerId];
+        if (!p || p.isDead) return;
+        p.isDead = true;
+        p.respawnTimer = p.isBot && !p.isBoss ? 100 : p.isBoss ? 600 : 120; // bots wait 5s, boss wait 30s, player wait 6s
+        // Scatter glowing space-orbs where segment residues were
+        const colors = [
+            '#f43f5e',
+            '#06b6d4',
+            '#10b981',
+            '#a855f7',
+            '#fbbf24',
+            '#f97316',
+            '#3b82f6'
+        ];
+        p.segments.forEach((seg, idx)=>{
+            if (idx % 2 === 0) {
+                currentSimState.orbs.push({
+                    id: `dis_orb_${Date.now()}_${idx}_${Math.random()}`,
+                    x: seg.x + (Math.random() - 0.5) * 15,
+                    y: seg.y + (Math.random() - 0.5) * 15,
+                    value: p.isBoss ? 8 : 4,
+                    color: colors[idx % colors.length],
+                    isPremium: Math.random() < 0.25
+                });
+            }
+        });
+        const victimN = p.id === (user?.id || '') ? 'YOU' : p.name;
+        const killerN = killerName || 'Deep Space';
+        setKillFeed((prev)=>[
+                ...prev,
+                {
+                    id: `kill_off_${Date.now()}_${Math.random()}`,
+                    victimName: victimN,
+                    killerName: killerN,
+                    timestamp: Date.now()
+                }
+            ].slice(-5));
+        if (playerId === (user?.id || '')) {
+            __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].playDeathExplosion();
+        }
+    };
+    const startOfflineSimulation = (mode)=>{
+        setIsOfflineMode(true);
+        const colors = [
+            '#f43f5e',
+            '#06b6d4',
+            '#10b981',
+            '#a855f7',
+            '#fbbf24',
+            '#f97316',
+            '#3b82f6'
+        ];
+        const initialOrbs = [];
+        for(let i = 0; i < 150; i++){
+            initialOrbs.push({
+                id: `orb_off_${Date.now()}_${i}_${Math.random()}`,
+                x: Math.random() * 3000,
+                y: Math.random() * 3000,
+                value: Math.random() < 0.1 ? 6 : 2,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                isPremium: Math.random() < 0.1
+            });
+        }
+        const localId = user?.id || `pilot_offline_${Date.now()}`;
+        const localUsername = user?.username || 'Offline Pilot';
+        const px = 500 + Math.random() * 2000;
+        const py = 500 + Math.random() * 2000;
+        const pAngle = Math.random() * Math.PI * 2;
+        const pSegments = [];
+        for(let i = 0; i < 10; i++){
+            pSegments.push({
+                x: px - Math.cos(pAngle) * i * 15,
+                y: py - Math.sin(pAngle) * i * 15
+            });
+        }
+        const localPlayer = {
+            id: localId,
+            name: `${localUsername} [OFFLINE]`,
+            isBot: false,
+            skin: user?.selectedSkin || 'neon_blue',
+            trail: user?.selectedTrail || 'none',
+            title: user?.selectedTitle || 'Solo Fighter',
+            x: px,
+            y: py,
+            angle: pAngle,
+            segments: pSegments,
+            score: 10,
+            length: 10,
+            speed: 5,
+            isDead: false,
+            respawnTimer: 0,
+            abilities: {
+                dash: {
+                    active: false,
+                    duration: 0
+                },
+                shield: {
+                    active: false,
+                    duration: 0
+                },
+                magnet: {
+                    active: false,
+                    duration: 0
+                },
+                ghost: {
+                    active: false,
+                    duration: 0
+                }
+            },
+            rank: user?.rank || 'BRONZE',
+            level: user?.level || 1,
+            kills: 0
+        };
+        const initialPlayers = {
+            [localId]: localPlayer
+        };
+        const botNames = [
+            'QuantumSnake',
+            'PulseCobalt',
+            'VegaCrawler',
+            'CyberGlider',
+            'NeonAsp',
+            'TetherViper',
+            'AeroSlink',
+            'VortexGlide'
+        ];
+        const botDifficulties = [
+            'easy',
+            'medium',
+            'hard'
+        ];
+        const difficultyTitles = {
+            easy: 'Bot Cadet',
+            medium: 'Bot Fighter',
+            hard: 'Bot Gladiator'
+        };
+        for(let i = 0; i < 8; i++){
+            const bId = `bot_local_${i}_${Math.floor(Math.random() * 1000)}`;
+            const bx = 300 + Math.random() * 2400;
+            const by = 300 + Math.random() * 2400;
+            const bAngle = Math.random() * Math.PI * 2;
+            const bSegments = [];
+            for(let j = 0; j < 12; j++){
+                bSegments.push({
+                    x: bx - Math.cos(bAngle) * j * 15,
+                    y: by - Math.sin(bAngle) * j * 15
+                });
+            }
+            const bDiff = botDifficulties[i % botDifficulties.length];
+            initialPlayers[bId] = {
+                id: bId,
+                name: `🤖 ${botNames[i % botNames.length]}`,
+                isBot: true,
+                skin: colors[i % colors.length] === '#fbbf24' ? 'galaxy' : 'neon_blue',
+                trail: 'none',
+                title: difficultyTitles[bDiff],
+                x: bx,
+                y: by,
+                angle: bAngle,
+                segments: bSegments,
+                score: 12,
+                length: 12,
+                speed: 5,
+                isDead: false,
+                respawnTimer: 0,
+                abilities: {
+                    dash: {
+                        active: false,
+                        duration: 0
+                    },
+                    shield: {
+                        active: false,
+                        duration: 0
+                    },
+                    magnet: {
+                        active: false,
+                        duration: 0
+                    },
+                    ghost: {
+                        active: false,
+                        duration: 0
+                    }
+                },
+                rank: 'GOLD',
+                level: 5 + i * 2,
+                kills: 0,
+                difficulty: bDiff
+            };
+        }
+        if (mode === __TURBOPACK__imported__module__$5b$project$5d2f$types$2f$index$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["GameMode"].CASUAL || mode === __TURBOPACK__imported__module__$5b$project$5d2f$types$2f$index$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["GameMode"].BATTLE_ROYALE) {
+            const bhId = 'world_boss_hydra';
+            const bx = 1500;
+            const by = 1500;
+            const bAngle = 0;
+            const bSegments = [];
+            for(let j = 0; j < 40; j++){
+                bSegments.push({
+                    x: bx - j * 15,
+                    y: by
+                });
+            }
+            initialPlayers[bhId] = {
+                id: bhId,
+                name: '👾 NEON HYDRA [WORLD BOSS]',
+                isBot: true,
+                isBoss: true,
+                skin: 'rainbow',
+                trail: 'galaxy_trail',
+                title: 'RAID WORLD BOSS',
+                x: bx,
+                y: by,
+                angle: bAngle,
+                segments: bSegments,
+                score: 150,
+                length: 40,
+                speed: 4,
+                isDead: false,
+                respawnTimer: 0,
+                abilities: {
+                    dash: {
+                        active: false,
+                        duration: 0
+                    },
+                    shield: {
+                        active: true,
+                        duration: 99999
+                    },
+                    magnet: {
+                        active: true,
+                        duration: 99999
+                    },
+                    ghost: {
+                        active: false,
+                        duration: 0
+                    }
+                },
+                rank: 'LEGEND',
+                level: 100,
+                kills: 0
+            };
+        }
+        simStateRef.current = {
+            players: initialPlayers,
+            orbs: initialOrbs,
+            brZoneRadius: mode === __TURBOPACK__imported__module__$5b$project$5d2f$types$2f$index$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["GameMode"].BATTLE_ROYALE ? 2000 : 1500,
+            brCenter: {
+                x: 1500,
+                y: 1500
+            }
+        };
+        setPlayers({
+            ...simStateRef.current.players
+        });
+        setOrbs([
+            ...simStateRef.current.orbs
+        ]);
+        setBrZoneRadius(simStateRef.current.brZoneRadius);
+        setBrCenter({
+            ...simStateRef.current.brCenter
+        });
+        setChatMessages([
+            {
+                id: 'sys_off_init',
+                username: 'CORETEX_SYS_BOT',
+                message: '🔴 Sockets blocked by iframe sandbox restriction. Seamless local high performance offline bot-arena loaded!',
+                timestamp: new Date().toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })
+            },
+            {
+                id: 'sys_off_init_2',
+                username: 'CORETEX_SYS_BOT',
+                message: '💡 Tip: Steer with mouse/joystick, hold Click/Space to speed boost. Press W (Shield), E (Vacuum), R (Phase)!',
+                timestamp: new Date().toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })
+            }
+        ]);
+        if (localSimIntervalRef.current) {
+            clearInterval(localSimIntervalRef.current);
+        }
+        localSimIntervalRef.current = setInterval(()=>{
+            const currentSimState = simStateRef.current;
+            const activeLobbyPlayers = currentSimState.players;
+            if (mode === __TURBOPACK__imported__module__$5b$project$5d2f$types$2f$index$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["GameMode"].BATTLE_ROYALE) {
+                currentSimState.brZoneRadius = Math.max(120, currentSimState.brZoneRadius - 0.45);
+            }
+            if (currentSimState.orbs.length < 150) {
+                const toSpawn = 150 - currentSimState.orbs.length;
+                for(let s = 0; s < toSpawn; s++){
+                    currentSimState.orbs.push({
+                        id: `orb_off_repl_${Date.now()}_${s}_${Math.random()}`,
+                        x: Math.random() * 3000,
+                        y: Math.random() * 3000,
+                        value: Math.random() < 0.1 ? 6 : 2,
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        isPremium: Math.random() < 0.1
+                    });
+                }
+            }
+            Object.keys(activeLobbyPlayers).forEach((pId)=>{
+                const p = activeLobbyPlayers[pId];
+                if (p.isDead) {
+                    if (p.respawnTimer > 0) {
+                        p.respawnTimer--;
+                        if (p.respawnTimer === 0) {
+                            p.isDead = false;
+                            p.score = 10;
+                            p.x = 200 + Math.random() * 2600;
+                            p.y = 200 + Math.random() * 2600;
+                            p.angle = Math.random() * Math.PI * 2;
+                            p.segments = [];
+                            for(let k = 0; k < 10; k++){
+                                p.segments.push({
+                                    x: p.x - Math.cos(p.angle) * k * 15,
+                                    y: p.y - Math.sin(p.angle) * k * 15
+                                });
+                            }
+                            if (pId === localId) {
+                                setKillFeed((prev)=>[
+                                        ...prev,
+                                        {
+                                            id: `respawn_${Date.now()}`,
+                                            victimName: 'SPECTATE',
+                                            killerName: p.name,
+                                            timestamp: Date.now()
+                                        }
+                                    ].slice(-5));
+                            }
+                        }
+                    }
+                    return;
+                }
+                Object.keys(p.abilities).forEach((abKey)=>{
+                    const ab = p.abilities[abKey];
+                    if (ab.active && ab.duration > 0) {
+                        ab.duration--;
+                        if (ab.duration === 0) {
+                            ab.active = false;
+                        }
+                    }
+                });
+                const currentBaseSpeed = 5;
+                const currentBoostSpeed = 9;
+                p.speed = p.abilities.dash.active && p.score > 8 ? currentBoostSpeed : currentBaseSpeed;
+                if (p.abilities.dash.active && p.score > 8) {
+                    p.score = Math.max(8, p.score - 0.08);
+                    if (Math.random() < 0.1) {
+                        const lastSeg = p.segments[p.segments.length - 1];
+                        currentSimState.orbs.push({
+                            id: `food_residue_${Date.now()}_${Math.random()}`,
+                            x: (lastSeg?.x || p.x) + (Math.random() - 0.5) * 15,
+                            y: (lastSeg?.y || p.y) + (Math.random() - 0.5) * 15,
+                            value: 2,
+                            color: '#06b6d4',
+                            isPremium: false
+                        });
+                    }
+                }
+                if (p.isBot) {
+                    if (p.isBoss) {
+                        const sysLocalPlayer = activeLobbyPlayers[localId];
+                        if (sysLocalPlayer && !sysLocalPlayer.isDead) {
+                            p.angle = Math.atan2(sysLocalPlayer.y - p.y, sysLocalPlayer.x - p.x);
+                        } else if (Math.random() < 0.05) {
+                            p.angle += (Math.random() - 0.5) * 1.2;
+                        }
+                        if (Math.random() < 0.08) {
+                            const fireAngle = p.angle + (Math.random() - 0.5) * Math.PI;
+                            currentSimState.orbs.push({
+                                id: `boss_projectile_${Date.now()}_${Math.random()}`,
+                                x: p.x + Math.cos(fireAngle) * 80,
+                                y: p.y + Math.sin(fireAngle) * 80,
+                                value: 8,
+                                color: '#f43f5e',
+                                isPremium: true
+                            });
+                        }
+                    } else {
+                        const diff = p.difficulty || 'medium';
+                        if (Math.random() < (diff === 'easy' ? 0.03 : diff === 'medium' ? 0.06 : 0.12)) {
+                            let nearestOrb = null;
+                            let minDist = diff === 'easy' ? 300 : diff === 'medium' ? 400 : 650;
+                            currentSimState.orbs.forEach((orb)=>{
+                                const dist = Math.sqrt((orb.x - p.x) ** 2 + (orb.y - p.y) ** 2);
+                                if (dist < minDist) {
+                                    minDist = dist;
+                                    nearestOrb = orb;
+                                }
+                            });
+                            if (nearestOrb) {
+                                const tOrb = nearestOrb;
+                                let targetAngle = Math.atan2(tOrb.y - p.y, tOrb.x - p.x);
+                                if (diff === 'hard' && Math.random() < 0.3) {
+                                    const target = activeLobbyPlayers[localId];
+                                    if (target && !target.isDead) {
+                                        const pDist = Math.sqrt((target.x - p.x) ** 2 + (target.y - p.y) ** 2);
+                                        if (pDist < 250) {
+                                            const aheadX = target.x + Math.cos(target.angle) * 80;
+                                            const aheadY = target.y + Math.sin(target.angle) * 80;
+                                            targetAngle = Math.atan2(aheadY - p.y, aheadX - p.x);
+                                            p.abilities.dash.active = true;
+                                        }
+                                    }
+                                }
+                                p.angle = targetAngle;
+                            } else {
+                                p.angle += (Math.random() - 0.5) * 1.5;
+                            }
+                        }
+                    }
+                }
+                const nextX = p.x + Math.cos(p.angle) * p.speed;
+                const nextY = p.y + Math.sin(p.angle) * p.speed;
+                if (nextX < 0 || nextX > 3000 || nextY < 0 || nextY > 3000) {
+                    disintegrateOffline(pId, 'deep space magnetic wall');
+                    return;
+                }
+                if (mode === __TURBOPACK__imported__module__$5b$project$5d2f$types$2f$index$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["GameMode"].BATTLE_ROYALE) {
+                    const dx = nextX - currentSimState.brCenter.x;
+                    const dy = nextY - currentSimState.brCenter.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > currentSimState.brZoneRadius) {
+                        p.score = Math.max(0, p.score - 0.45);
+                        if (p.score <= 0.05) {
+                            disintegrateOffline(pId, 'the radioactive storm');
+                            return;
+                        }
+                    }
+                }
+                p.x = nextX;
+                p.y = nextY;
+                const head = {
+                    x: p.x,
+                    y: p.y
+                };
+                p.segments.unshift(head);
+                const targetLength = Math.floor(10 + (p.score - 10) * 1.5);
+                while(p.segments.length > targetLength){
+                    p.segments.pop();
+                }
+                for(let i = currentSimState.orbs.length - 1; i >= 0; i--){
+                    const orb = currentSimState.orbs[i];
+                    const dx = orb.x - p.x;
+                    const dy = orb.y - p.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (p.abilities.magnet.active && dist < 160) {
+                        const pullSpeed = 4.5;
+                        orb.x -= dx / dist * pullSpeed;
+                        orb.y -= dy / dist * pullSpeed;
+                    }
+                    if (dist < 26) {
+                        p.score += orb.value * 0.35;
+                        currentSimState.orbs.splice(i, 1);
+                        if (pId === localId) {
+                            setLocalStats(2, 4);
+                        }
+                    }
+                }
+            });
+            const activePlayersOffline = Object.values(currentSimState.players).filter((p)=>!p.isDead);
+            for(let u = 0; u < activePlayersOffline.length; u++){
+                const p1 = activePlayersOffline[u];
+                if (p1.abilities.ghost.active) continue;
+                for(let v = 0; v < activePlayersOffline.length; v++){
+                    const p2 = activePlayersOffline[v];
+                    if (p1.id === p2.id) continue;
+                    if (p2.abilities.ghost.active) continue;
+                    for(let s = 1; s < p2.segments.length; s++){
+                        const segment = p2.segments[s];
+                        const dx = p1.x - segment.x;
+                        const dy = p1.y - segment.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 25) {
+                            if (p1.abilities.shield.active) {
+                                p1.angle += Math.PI;
+                                p1.x += Math.cos(p1.angle) * p1.speed * 4;
+                                p1.y += Math.sin(p1.angle) * p1.speed * 4;
+                                break;
+                            } else {
+                                disintegrateOffline(p1.id, p2.name);
+                                if (!p1.isBoss) {
+                                    p2.kills++;
+                                    if (p2.id === localId) {
+                                        setLocalStats(60, 150, true);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            setPlayers({
+                ...currentSimState.players
+            });
+            setOrbs([
+                ...currentSimState.orbs
+            ]);
+            setBrZoneRadius(currentSimState.brZoneRadius);
+            setBrCenter({
+                ...currentSimState.brCenter
+            });
+        }, 50);
+    };
     const handleJoinGame = (mode, selectedRoomCode)=>{
         if (!user) return;
         setCurrentGameMode(mode);
@@ -6408,8 +6984,18 @@ function AppPage() {
         setOrbs([]);
         setChatMessages([]);
         setKillFeed([]);
-        // Spark procedural background ambient drone synth
         __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].startBackgroundMusic();
+        // Sockets handshake timeout trigger (failsafe)
+        const fallbackTimeout = setTimeout(()=>{
+            if (!socketRef.current || !socketRef.current.connected) {
+                console.warn('Socket connection timed out! Booting off-line high performance fallback...');
+                if (socketRef.current) {
+                    socketRef.current.disconnect();
+                    socketRef.current = null;
+                }
+                startOfflineSimulation(mode);
+            }
+        }, 1200);
         const socket = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$socket$2e$io$2d$client$2f$build$2f$esm$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["io"])({
             path: '/socket.io',
             transports: [
@@ -6419,6 +7005,8 @@ function AppPage() {
         });
         socketRef.current = socket;
         socket.on('connect', ()=>{
+            clearTimeout(fallbackTimeout);
+            setIsOfflineMode(false);
             console.log('Orbital sockets connection bridged successfully: ', socket.id);
             socket.emit('game:join', {
                 userId: user.id,
@@ -6500,7 +7088,6 @@ function AppPage() {
                     handleExitGame();
                     return;
                 }
-                // Map Replay state frame to snake structures
                 const activePlayers = {};
                 Object.keys(frame.players).forEach((pId)=>{
                     const raw = frame.players[pId];
@@ -6555,7 +7142,7 @@ function AppPage() {
                 setPlayers(activePlayers);
                 setOrbs(activeOrbs);
                 frameIdx++;
-            }, 200); // Renders smoothly at recorded snapshot frequencies
+            }, 200);
         } catch (e) {
             console.warn("Spectator play failed:", e);
             handleExitGame();
@@ -6567,6 +7154,13 @@ function AppPage() {
                 angle,
                 isBoosting
             });
+        } else if (isOfflineMode && user) {
+            const currentSimState = simStateRef.current;
+            const player = currentSimState.players[user.id];
+            if (player && !player.isDead) {
+                player.angle = angle;
+                player.abilities.dash.active = isBoosting && player.score > 8;
+            }
         }
     };
     const handleTriggerAbility = (type)=>{
@@ -6574,6 +7168,19 @@ function AppPage() {
             socketRef.current.emit('player:ability', {
                 type
             });
+        } else if (isOfflineMode && user) {
+            const currentSimState = simStateRef.current;
+            const player = currentSimState.players[user.id];
+            if (player && !player.isDead && !player.abilities[type].active) {
+                if (type === 'shield') __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].playShieldActivate();
+                else if (type === 'magnet') __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].playPremiumOrbEat();
+                else __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].playVictoryArpeggio();
+                player.abilities[type].active = true;
+                player.abilities[type].duration = type === 'shield' ? 80 : type === 'magnet' ? 120 : 60;
+                setPlayers({
+                    ...currentSimState.players
+                });
+            }
         }
     };
     const handleSendChatMessage = (message)=>{
@@ -6582,22 +7189,62 @@ function AppPage() {
                 username: user.username,
                 message
             });
+        } else if (isOfflineMode && user && message.trim()) {
+            const userMsg = {
+                id: `chat_off_usr_${Date.now()}`,
+                username: user.username,
+                message: message.trim(),
+                timestamp: new Date().toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })
+            };
+            setChatMessages((prev)=>[
+                    ...prev,
+                    userMsg
+                ].slice(-45));
+            const botResponses = [
+                "ViperBot: Stealth maneuvers activated! Watch your six!",
+                "CyberCrawler: Press Click/Space to accelerate! Boost and cut them off!",
+                "HyperCrawl: There's a massive cluster of space coordinates at the center!",
+                "CORETEX_SYS_BOT: Mass intake is critical to scale up and survive!",
+                "SYS_BOT: Did you see that? You slithered right past a premium golden orb!",
+                "AstroSlink: Watch your coordinate boundaries, there's a deep space wall!"
+            ];
+            setTimeout(()=>{
+                const botResponse = {
+                    id: `chat_off_bot_${Date.now()}`,
+                    username: 'CORETEX_SYS_BOT',
+                    message: botResponses[Math.floor(Math.random() * botResponses.length)],
+                    timestamp: new Date().toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })
+                };
+                setChatMessages((prev)=>[
+                        ...prev,
+                        botResponse
+                    ].slice(-45));
+                __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].playOrbEat();
+            }, 1000 + Math.random() * 1500);
         }
     };
     const handleExitGame = ()=>{
-        // Teardown normal sockets
         if (socketRef.current) {
             socketRef.current.disconnect();
             socketRef.current = null;
         }
-        // Teardown replay player simulation intervals
         if (replayIntervalRef.current) {
             clearInterval(replayIntervalRef.current);
             replayIntervalRef.current = null;
         }
+        if (localSimIntervalRef.current) {
+            clearInterval(localSimIntervalRef.current);
+            localSimIntervalRef.current = null;
+        }
         setIsPlaying(false);
         setIsReplaying(false);
-        // Stop ambient synthesizers music loop
+        setIsOfflineMode(false);
         __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$SoundManager$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SoundManager"].stopBackgroundMusic();
         if (user) {
             fetch(`/api/users/${user.id}`).then((res)=>res.json()).then((freshUser)=>{
@@ -6627,7 +7274,7 @@ function AppPage() {
                     onInputChange: handleInputChange
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 308,
+                    lineNumber: 882,
                     columnNumber: 11
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$GameUI$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["GameUI"], {
@@ -6644,13 +7291,13 @@ function AppPage() {
                     killFeed: killFeed
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 317,
+                    lineNumber: 891,
                     columnNumber: 11
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/app/page.tsx",
-            lineNumber: 307,
+            lineNumber: 881,
             columnNumber: 9
         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
             className: "relative w-full h-full select-none",
@@ -6664,7 +7311,7 @@ function AppPage() {
                     onWatchReplay: handleWatchReplay
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 333,
+                    lineNumber: 907,
                     columnNumber: 11
                 }, this),
                 user && user.role === 'admin' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -6678,12 +7325,12 @@ function AppPage() {
                         className: "w-5.5 h-5.5 animate-pulse"
                     }, void 0, false, {
                         fileName: "[project]/app/page.tsx",
-                        lineNumber: 351,
+                        lineNumber: 925,
                         columnNumber: 15
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 343,
+                    lineNumber: 917,
                     columnNumber: 13
                 }, this),
                 isAdminPanelOpen && user && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$AdminPanel$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["AdminPanel"], {
@@ -6691,22 +7338,22 @@ function AppPage() {
                     onClose: ()=>setIsAdminPanelOpen(false)
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 356,
+                    lineNumber: 930,
                     columnNumber: 13
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/app/page.tsx",
-            lineNumber: 332,
+            lineNumber: 906,
             columnNumber: 9
         }, this)
     }, void 0, false, {
         fileName: "[project]/app/page.tsx",
-        lineNumber: 305,
+        lineNumber: 879,
         columnNumber: 5
     }, this);
 }
-_s(AppPage, "/GoA9ZkxJH8kJo2tYyfRD6VBgzc=");
+_s(AppPage, "JQnTMG21DJHdml3WSQFRLf0u59k=");
 _c = AppPage;
 var _c;
 __turbopack_context__.k.register(_c, "AppPage");
