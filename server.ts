@@ -14,14 +14,29 @@ import { DBInstance, COSMETICS_SHOP, GAME_ACHIEVEMENTS } from './server/store';
 import { GameController } from './server/game';
 
 const dev = process.env.NODE_ENV !== 'production';
-const nextApp = next({ dev });
+
+console.log('[BOOT] NODE_ENV =', process.env.NODE_ENV);
+console.log('[BOOT] Creating Next.js instance');
+
+const nextApp = next({
+  dev,
+  hostname: '0.0.0.0',
+});
+
 const nextHandler = nextApp.getRequestHandler();
 
 async function startServer() {
-  // Bootstrap the Next.js compilation engine
-  await nextApp.prepare();
+  try {
+    console.log('[BOOT] Starting Snake Legends');
 
-  const app = express();
+    console.log('[BOOT] Preparing Next.js...');
+    await nextApp.prepare();
+
+    console.log('[BOOT] Next.js ready');
+
+    const app = express();
+
+    console.log('[BOOT] Express initialized');
   app.use(express.json());
 
   const httpServer = createHttpServer(app);
@@ -33,7 +48,7 @@ async function startServer() {
     path: '/socket.io',
   });
 
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // ==========================================
   // EXPRESS API ENDPOINTS
@@ -433,11 +448,15 @@ async function startServer() {
     return nextHandler(req, res);
   });
 
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SNAKE LEGENDS SERVER] Next.js 15 full-stack live on: http://localhost:${PORT}`);
-  });
+  console.log(`[BOOT] Listening on port ${PORT}`);
+
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`[SNAKE LEGENDS SERVER] LIVE ON PORT ${PORT}`);
+});
+} catch (error) {
+  console.error('[BOOT FAILED]', error);
+  process.exit(1);
+}
 }
 
-startServer().catch((error) => {
-  console.error('Fatal Server crash on bootstrap:', error);
-});
+startServer();
